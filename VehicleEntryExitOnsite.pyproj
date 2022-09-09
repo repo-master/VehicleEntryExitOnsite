@@ -26,6 +26,7 @@
   <ItemGroup>
     <Compile Include="vehiclebot\components\camera.py" />
     <Compile Include="vehiclebot\components\detector.py" />
+    <Compile Include="vehiclebot\components\filter.py" />
     <Compile Include="vehiclebot\components\processing.py" />
     <Compile Include="vehiclebot\components\videodisplay.py" />
     <Compile Include="vehiclebot\components\__init__.py" />
@@ -55,6 +56,7 @@
     <Content Include=".env" />
     <Content Include=".gitignore" />
     <Content Include="config.yaml" />
+    <Content Include="requirements.txt" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in

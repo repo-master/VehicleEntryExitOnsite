@@ -6,7 +6,7 @@ from aiohttp.web import Application
 
 from concurrent.futures import Executor, ProcessPoolExecutor
 
-from typing import Dict, Type
+from typing import Dict, Type, Any
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,7 @@ class AIOTask(object):
     '''
     Base AIO task class
     '''
+    metadata : Dict[str, Any] = {"dependencies": []}
     def __init__(self, tm, task_name : str, *args, **kwargs):
         self.tm = tm
         self.task : asyncio.Task = None

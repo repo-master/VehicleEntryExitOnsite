@@ -24,7 +24,7 @@ class VehicleDetectorProcess(GlobalInstances):
         )
 
     def _detect(self, img):
-        self._last_detection = self.model.detect(img, zip_results=False, label_str = False)
+        self._last_detection = self.model.detect(img, zip_results=False, label_str=False)
         
     def _updateTracker(self):
         self.tracker.update(*self._last_detection)
@@ -104,6 +104,7 @@ class VehicleDetectorProcess(GlobalInstances):
 
 
 class VehicleDetector(AIOTask):
+    metadata : typing.Dict[str, typing.Any] = {"dependencies": ['videodisplay']}
     def __init__(self, tm, task_name, input_source, detector : typing.Dict, **kwargs):
         super().__init__(tm, task_name, **kwargs)
         self.inp_src = input_source
@@ -149,5 +150,5 @@ class VehicleDetector(AIOTask):
                 img_drawn = await self.call_process(VehicleDetectorProcess.drawTracks, self.detector, img)
 
                 await self.tm['videodisplay'].imshow("Detections", img_drawn)
-            
-            await asyncio.sleep(0.1)
+            else:
+                await asyncio.sleep(0.1)
