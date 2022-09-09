@@ -1,0 +1,66 @@
+#Application configuration
+app:
+  #Config for customer requirements
+  customer:
+    #Information of the parking site (to associate data with). site_key is the password to authenticate
+    site_id: !env SITE_ID    #Load id from environment variable
+    site_key: !env SITE_KEY  #Load key from environment variable
+    
+    #All connected cameras
+    cameras:
+      - camera1: &primary_camera
+          #Which camera device to use (index or url for ip camera)
+          src: 0
+          skip_frames: 0
+          show_output: true
+
+  api:
+    api_base: http://localhost:5000/
+    ws_base: ws://localhost:5000/
+
+  #Task configuration
+  tasks:
+    camera_source:
+      type: CameraSource
+      properties: *primary_camera
+    vehicle_detector:
+      type: VehicleDetector
+      properties:
+        input_source: camera_source
+        detector:
+            model: "models/vehicles.zip"
+            detection_period: 1.0
+        tracker:
+          type: SORT
+    videodisplay:
+      type: VideoDisplay
+
+
+#Logging configuration
+logger:
+  version: 1
+  root:
+    level: DEBUG
+    handlers:
+      #- log_file
+      - console
+  handlers:
+    log_file:
+      class: logging.handlers.RotatingFileHandler
+      level: INFO
+      formatter: preciselog
+      filename: vehiclebot.log
+      maxBytes: 10485760
+      backupCount: 3
+    console:
+      class: logging.StreamHandler
+      formatter: colorful
+      level: DEBUG
+      stream: ext://sys.stdout
+  formatters:
+    preciselog:
+      format: '%(asctime)s [%(levelname)s] [%(name)s] (%(filename)s:%(lineno)d) %(message)s'
+      datefmt: '%Y-%m-%d %H:%M:%S'
+    colorful:
+      (): vehiclebot.log.ColorfulFormatter
+      apply_color_sequence: false
