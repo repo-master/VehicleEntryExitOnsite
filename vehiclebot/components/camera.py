@@ -33,12 +33,13 @@ class CameraSourceProcess(GlobalInstances):
             self.read()
     
 class CameraSource(AIOTask):
-    def __init__(self, tm, task_name, src : typing.Union[int, str], skip_frames : int = 0, show_output : bool = False, **kwargs):
+    def __init__(self, tm, task_name, src : typing.Union[int, str], skip_frames : int = 0, video_output : str = None, throttle_fps : float = None, **kwargs):
         super().__init__(tm, task_name, **kwargs)
         self.source = src
         self._skipframes = skip_frames
         if self._skipframes < 0: self._skipframes = 0
-        self.show_output = show_output
+        self.video_output = video_output
+        self.throttle_fps = throttle_fps
 
         self.cap = None
         self._latest_frame = None
@@ -47,9 +48,14 @@ class CameraSource(AIOTask):
         self._stop = False
         self.proc = ProcessPoolExecutor(max_workers=1, initializer=CameraSourceProcess.init)
     
-    def call_process(self, func, *args):
-        loop = asyncio.get_event_loop()
-        return loop.run_in_executor(self.proc, func, *args)
+    async def call_process(self, func, *args):
+        task = asyncio.get_event_loop().run_in_executor(self.proc, func, *args)
+        task.add_done_callback(self._proc_done_callback)
+        return await task
+
+    def _proc_done_callback(self, future : asyncio.Future):
+        if future.exception():
+            self.logger.exception(future.exception())
     
     async def start_task(self):
         self.logger.info("Starting video capture of source \"%s\"" % str(self.source))
@@ -83,8 +89,11 @@ class CameraSource(AIOTask):
             if ret:
                 #img = cv2.resize(img, (800,450))
                 self._latest_frame = img
-                if self.show_output:
-                    await self.tm['videodisplay'].imshow("Video", img)
+                if self.video_output is not None:
+                    await self.tm[self.video_output].imshow("Video", img)
+
+                if self.throttle_fps is not None:
+                    await asyncio.sleep(1.0 / self.throttle_fps)
             else:
                 break
 

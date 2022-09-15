@@ -1,8 +1,6 @@
 
-from motrackers import (
-    CentroidTracker,
-    SORT
-)
+import motrackers
+from motrackers.tracker import Tracker
 
 from .trajectory import (
     Trajectory,

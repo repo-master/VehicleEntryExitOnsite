@@ -32,6 +32,7 @@
     <Compile Include="vehiclebot\components\__init__.py" />
     <Compile Include="vehiclebot\config.py" />
     <Compile Include="vehiclebot\log.py" />
+    <Compile Include="vehiclebot\management\__init__.py" />
     <Compile Include="vehiclebot\model\model.py" />
     <Compile Include="vehiclebot\model\yolodnn.py" />
     <Compile Include="vehiclebot\model\__init__.py" />
@@ -50,6 +51,7 @@
     <Folder Include="vehiclebot\" />
     <Folder Include="vehiclebot\components\" />
     <Folder Include="vehiclebot\model\" />
+    <Folder Include="vehiclebot\management\" />
     <Folder Include="vehiclebot\tracker\" />
   </ItemGroup>
   <ItemGroup>

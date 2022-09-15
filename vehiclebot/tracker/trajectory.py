@@ -27,7 +27,10 @@ TRACK_COLORS = [
 
 class Trajectory:
     def __init__(self):
-        self.tracks = {}
+        self.tracks : typing.Dict[int, typing.Dict] = {}
+
+    def __getitem__(self, track_id : int):
+        return self.tracks[track_id]
 
     def update(self, track_id, centroid_point, is_active : bool = True):
         if track_id not in self.tracks:
@@ -45,7 +48,7 @@ class Trajectory:
                 except np.RankWarning:
                     pass
 
-    def estimatedDirection(self, track_id):
+    def estimatedCardinalDirection(self, track_id):
         pass
 
     @staticmethod

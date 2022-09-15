@@ -10,6 +10,7 @@ from aiohttp.client import ClientSession
 from vehiclebot.config import load_config
 from vehiclebot.log import init_root_logger
 from vehiclebot.task import TaskManager
+from vehiclebot.management import init_routes
 
 root_logger : logging.Logger = init_root_logger()
 
@@ -61,6 +62,10 @@ async def VehicleEntryExitOnSite(loop : asyncio.AbstractEventLoop = None):
     app.cleanup_ctx.append(detection_task_ctx)
 
     root_logger.debug("AIO cleanup tasks created")
+
+    #Management pages
+    init_routes(app)
+    root_logger.info("Management routes added")
     
     root_logger.info("Application now ready to launch")
     return app

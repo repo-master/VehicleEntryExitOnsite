@@ -12,7 +12,6 @@ app:
           #Which camera device to use (index or url for ip camera)
           src: 0
           skip_frames: 0
-          show_output: true
 
   api:
     api_base: http://localhost:5000/
@@ -22,19 +21,35 @@ app:
   tasks:
     camera_source:
       type: CameraSource
-      properties: *primary_camera
+      properties:
+        <<: *primary_camera
+        video_output: videodisplay
     vehicle_detector:
       type: VehicleDetector
       properties:
         input_source: camera_source
+        video_output: videodisplay
+        output_result: dump_file
         detector:
             model: "models/vehicles.zip"
             detection_period: 1.0
         tracker:
+          # Check out the motrackers library to find out which trackers are supported
           type: SORT
+          max_lost: 8
+          iou_threshold: 0.6
+    dump_file:
+      type: RemoteProcess
+      properties:
+        dir: "results/"
+    
+    #Show video windows to display what is happening
     videodisplay:
       type: VideoDisplay
 
+  #Management web server
+  management:
+    
 
 #Logging configuration
 logger:
