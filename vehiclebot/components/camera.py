@@ -45,17 +45,19 @@ class CameraSource(AIOTask):
         self._latest_frame = None
         self.cap_get_wait = asyncio.Event()
 
-        self._stop = False
+        self._stop = asyncio.Event()
         self.proc = ProcessPoolExecutor(max_workers=1, initializer=CameraSourceProcess.init)
+        self.logger.info("Started OpenCV worker process")
     
-    async def call_process(self, func, *args):
+    def call_process(self, func, *args) -> asyncio.Future:
         task = asyncio.get_event_loop().run_in_executor(self.proc, func, *args)
         task.add_done_callback(self._proc_done_callback)
-        return await task
+        return task
 
     def _proc_done_callback(self, future : asyncio.Future):
-        if future.exception():
-            self.logger.exception(future.exception())
+        exc = future.exception()
+        if exc:
+            self.logger.exception(exc)
     
     async def start_task(self):
         self.logger.info("Starting video capture of source \"%s\"" % str(self.source))
@@ -67,14 +69,15 @@ class CameraSource(AIOTask):
             self.cap_get_wait.set()
 
     async def stop_task(self):
-        self._stop = True
-        await self.task
-        if self.cap is None: return
+        self._stop.set()
         self.logger.info("Stopping video capture")
-        try:
-            await self.call_process(CameraSourceProcess.stop_capture, self.cap)
-        except Exception as e:
-            self.logger.exception(e)
+        await self.task
+        if self.cap is not None:
+            try:
+                await self.call_process(CameraSourceProcess.stop_capture, self.cap)
+            except Exception as e:
+                self.logger.exception(e)
+        self.proc.shutdown()
 
     async def __call__(self):
         await self.cap_get_wait.wait()
@@ -83,7 +86,7 @@ class CameraSource(AIOTask):
         #Skip frames
         await self.call_process(CameraSourceProcess.skip_frames, self.cap, self._skipframes)
 
-        while not self._stop:
+        while not self._stop.is_set():
             #Fetch images as fast as possible
             ret, img = await self.call_process(CameraSourceProcess.read_frame, self.cap)
             if ret:

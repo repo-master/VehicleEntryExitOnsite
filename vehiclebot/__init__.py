@@ -3,6 +3,11 @@ import logging
 import logging.config
 import asyncio
 
+from vehiclebot.patches import asyncio_monkey_patch
+
+#Apply patches to methods to add more functions
+asyncio_monkey_patch()
+
 from decouple import config as deconf
 from aiohttp.web import Application
 from aiohttp.client import ClientSession
@@ -36,12 +41,20 @@ async def detection_task_ctx(app : Application):
     _log.debug('Closing detection tasks')
     await app.tm.close()
 
-async def VehicleEntryExitOnSite(loop : asyncio.AbstractEventLoop = None):
+def app_exc_hdl(loop : asyncio.AbstractEventLoop, context):
+    loop.default_exception_handler(context)
+
+async def VehicleEntryExitOnSite(loop : asyncio.AbstractEventLoop = None, debug : bool = False):
     '''
     The main application entry
     '''
     if loop is None:
         loop = asyncio.get_event_loop()
+
+    loop.set_debug(debug)
+    root_logger.info("Debug mode is %s" % 'on' if debug else 'off')
+
+    loop.set_exception_handler(app_exc_hdl)
 
     #Load configuration data
     root_logger.info("Loading configuration file...")
@@ -50,6 +63,9 @@ async def VehicleEntryExitOnSite(loop : asyncio.AbstractEventLoop = None):
     #Set-up the logger from config
     root_logger.info("Setting up the logger...")
     logging.config.dictConfig(cfg['logger'])
+
+    if debug:
+        root_logger.setLevel(logging.DEBUG)
 
     root_logger.info("Starting Vehicle detection program...")
     #Application to manage all tasks and a backend access

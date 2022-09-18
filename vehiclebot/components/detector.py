@@ -45,6 +45,7 @@ class VehicleDetectorProcess(GlobalInstances):
             #Timestamp
             if not hasattr(trk_obj, 'detect_ts'):
                 setattr(trk_obj, 'detect_ts', datetime.datetime.now(datetime.timezone.utc))
+            setattr(trk_obj, 'update_ts', datetime.datetime.now(datetime.timezone.utc))
 
             xmin, ymin, width, height = trk[2:6]
             xcentroid, ycentroid = xmin + 0.5*width, ymin + 0.5*height
@@ -122,35 +123,42 @@ class VehicleDetectorProcess(GlobalInstances):
             
             trk_id = trk[1]
             xmin, ymin, width, height = trk[2:6]
-            conf = trk[6]
+            conf = float(trk[6])
             cls_lbl = trk_obj.class_id
             cls_lbl = self.model.getLabel(cls_lbl)
-            detect_ts = None
+            detect_ts, update_ts = None, None
             if hasattr(trk_obj, 'detect_ts'):
                 detect_ts = trk_obj.detect_ts
+            if hasattr(trk_obj, 'update_ts'):
+                update_ts = trk_obj.update_ts
             traj_dir_angle = self.traj[trk_id]['dir']
+            traj_dir_mv = self.traj.estimatedCardinalDirection(trk_id)
 
             #Integer to crop
             xmin, ymin, width, height = int(xmin), int(ymin), int(width), int(height)
             
             if not trk_obj.lost and width > 0 and height > 0:
-                ENCODE_FORMAT = '.png'
+                ENCODE_FORMAT = '.png' #TODO: move to config
                 img_crop = self._crop(img, xmin, ymin, xmin+width, ymin+height)
                 if img_crop.shape[0] > 0 and img_crop.shape[1] > 0:
                     ret, img_blob = cv2.imencode(ENCODE_FORMAT, img_crop)
                     if ret:
                         res_item = {
                             'track_id': trk_id,
-                            'img': img_blob,
-                            'format': ENCODE_FORMAT,
+                            'age': trk_obj.age,
+                            'img': {
+                                'encoding': "encoded_np",
+                                'data': img_blob,
+                                'format': ENCODE_FORMAT
+                            },
                             'is_new_detection': trk_obj.age <= 1,
                             'class': cls_lbl,
                             'class_confidence': conf,
-                            'bbox': tuple(trk[2:6]),
+                            'bbox': (xmin, ymin, width, height),
                             'first_detect_ts': detect_ts,
-                            'last_update_ts': datetime.datetime.now(datetime.timezone.utc),
+                            'last_update_ts': update_ts,
                             'estimated_movement_angle': traj_dir_angle,
-                            'estimated_movement_direction': ''
+                            'estimated_movement_direction': traj_dir_mv
                         }
                         results.append(res_item)
 
@@ -185,18 +193,21 @@ class VehicleDetector(AIOTask):
         self.detector_params = detector
         self.tracker_params = tracker
         self.video_output = video_output
+        self.output_result = output_result
         self.detector = None
-        self._stop = False
+        self._stop = asyncio.Event()
         self.proc = ProcessPoolExecutor(max_workers=1, initializer=VehicleDetectorProcess.init)
+        self.logger.info("Started Detector worker process")
 
-    async def call_process(self, func, *args):
+    def call_process(self, func, *args) -> asyncio.Future:
         task = asyncio.get_event_loop().run_in_executor(self.proc, func, *args)
         task.add_done_callback(self._proc_done_callback)
-        return await task
+        return task
 
     def _proc_done_callback(self, future : asyncio.Future):
-        if future.exception():
-            self.logger.exception(future.exception())
+        exc = future.exception()
+        if exc:
+            self.logger.exception(exc)
     
     async def start_task(self):
         try:
@@ -205,9 +216,15 @@ class VehicleDetector(AIOTask):
         except (FileNotFoundError, AttributeError, ValueError) as e:
             self.logger.exception(e)
 
+        if self.output_result not in self.tm.tasks:
+            raise ValueError("Required task \"%s\" is not loaded" % self.output_result)
+        
+        # if not isinstance(self.tm[self.output_result], DetectionHandler):
+
     async def stop_task(self):
-        self._stop = True
+        self._stop.set()
         await self.task
+        self.proc.shutdown()
 
     async def __call__(self):
         try:
@@ -222,7 +239,7 @@ class VehicleDetector(AIOTask):
           - Perform detections and
           - Update the tracker with detected objects
         '''
-        while not self._stop:
+        while not await self._stop.wait_for(0.1):
             #Try to grab a frame from video source
             img = cap.frame
             if img is not None:
@@ -234,12 +251,10 @@ class VehicleDetector(AIOTask):
                 # Show video output
                 proc_vout = self.render_results()
                 # Send results to processing stage
-                proc_push = self.push_results()
+                proc_push = self.push_results(img)
                 
+                # Wait till both tasks are done
                 await asyncio.gather(proc_vout, proc_push)
-            else:
-                #Do not hog asyncio's time from the tight loop
-                await asyncio.sleep(0.1)
 
     async def render_results(self):
         if self.video_output is not None:
@@ -249,6 +264,10 @@ class VehicleDetector(AIOTask):
             vidisplay = self.tm[self.video_output]
             await vidisplay.imshow("Detections", img_drawn)
 
-    async def push_results(self):
-        res = await self.call_process(VehicleDetectorProcess.cropAndProcessTracks, self.detector)
-        print(res)
+    async def push_results(self, img):
+        if self.output_result is not None:
+            detections_data = self.call_process(VehicleDetectorProcess.cropAndProcessTracks, self.detector, img)
+            dispatch_tasks = self.output_result
+            if isinstance(dispatch_tasks, str): dispatch_tasks = [dispatch_tasks]
+            out_tasks = [self.tm[x].processDetection(detections_data) for x in dispatch_tasks]
+            await asyncio.gather(*out_tasks)

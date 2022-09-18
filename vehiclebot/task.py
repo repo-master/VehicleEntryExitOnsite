@@ -4,11 +4,9 @@ import logging
 import importlib
 from aiohttp.web import Application
 
-from concurrent.futures import Executor, ProcessPoolExecutor
+from concurrent.futures import Executor, ThreadPoolExecutor
 
 from typing import Dict, Type, Any
-
-logger = logging.getLogger(__name__)
 
 def module_path_decode(module_string : str, default_package : str = __name__):
     pkg_split = module_string.split('.')
@@ -38,17 +36,19 @@ class AIOTask(object):
 class TaskManager(object):
     def __init__(self, app : Application):
         self.app = app
+        self.logger = logging.getLogger(__name__)
         self.tasks : Dict[str, AIOTask] = dict()
-        self.pool : Executor = ProcessPoolExecutor()
+        self.pool : Executor = ThreadPoolExecutor(max_workers=16)
+        self.logger.info("Started ThreadPoolExecutor with %d threads" % self.pool._max_workers)
         
     async def add_task(self, task_name : str, task_conf : Dict):
         '''
         Add new task from configuration dict
         '''
-        logger.info("Creating task \"%s\"" % task_name)
+        self.logger.info("Creating task \"%s\"" % task_name)
         if task_name in self.tasks:
             is_loaded = self.tasks[task_name].task is not None
-            logger.warning("Task \"%s\ already exists %s, ignoring." % (task_name, "and is loaded" if is_loaded else ''))
+            self.logger.warning("Task \"%s\ already exists %s, ignoring." % (task_name, "and is loaded" if is_loaded else ''))
             return
 
         task_cls : Type[AIOTask] = None
@@ -58,10 +58,10 @@ class TaskManager(object):
             task_module = importlib.import_module(imp_mod)
             task_cls = getattr(task_module, imp_cls_name)
         except (ImportError, AttributeError):
-            logger.error("Unable to load task plugin \"%s\" from module \"%s\". Make sure the module exists. Skipping" % (imp_cls_name, imp_mod))
+            self.logger.error("Unable to load task plugin \"%s\" from module \"%s\". Make sure the module exists. Skipping" % (imp_cls_name, imp_mod))
             return
         if not issubclass(task_cls, AIOTask):
-            logger.error("Cannot load task \"%s\". It must be of type AIOTask. Skipping" % imp_cls_name)
+            self.logger.error("Cannot load task \"%s\". It must be of type AIOTask. Skipping" % imp_cls_name)
             return
         
         self.tasks[task_name] = task_cls(self, task_name, **task_conf.get('properties', {}))
@@ -70,7 +70,7 @@ class TaskManager(object):
         return self.tasks[task_name]
         
     async def shutdown_task(self, task_name : str):
-        logger.info("Shutting down task \"%s\"..." % task_name)
+        self.logger.info("Shutting down task \"%s\"..." % task_name)
         await self.tasks[task_name].stop_task()
         
     async def enumerate_tasks(self, task_list : Dict[str, Dict]):

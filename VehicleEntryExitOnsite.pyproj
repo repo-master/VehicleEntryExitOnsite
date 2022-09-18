@@ -14,6 +14,7 @@
     <InterpreterId>Global|VisualStudio|Work venv (Python 3.9 (64-bit))</InterpreterId>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
+    <CommandLineArguments>-d</CommandLineArguments>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -37,6 +38,7 @@
     <Compile Include="vehiclebot\model\yolodnn.py" />
     <Compile Include="vehiclebot\model\__init__.py" />
     <Compile Include="vehiclebot\multitask.py" />
+    <Compile Include="vehiclebot\patches.py" />
     <Compile Include="vehiclebot\task.py" />
     <Compile Include="vehiclebot\tracker\bezier.py" />
     <Compile Include="vehiclebot\tracker\trajectory.py" />

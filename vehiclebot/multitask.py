@@ -18,5 +18,3 @@ class GlobalInstances:
     @staticmethod
     def get_instance(instance : str):
         return instances.get(instance)
-
-

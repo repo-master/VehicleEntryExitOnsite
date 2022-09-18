@@ -23,20 +23,26 @@ class VideoDisplayProcess:
 class VideoDisplay(AIOTask):
     def __init__(self, tm, task_name, **kwargs):
         super().__init__(tm, task_name, **kwargs)
-        self._stop = False
+        self._stop = asyncio.Event()
         self.proc = ProcessPoolExecutor(max_workers=1)
     
-    def call_process(self, func, *args):
-        loop = asyncio.get_event_loop()
-        return loop.run_in_executor(self.proc, func, *args)
+    def call_process(self, func, *args) -> asyncio.Future:
+        task = asyncio.get_event_loop().run_in_executor(self.proc, func, *args)
+        task.add_done_callback(self._proc_done_callback)
+        return task
+
+    def _proc_done_callback(self, future : asyncio.Future):
+        exc = future.exception()
+        if exc:
+            self.logger.exception(exc)
     
     async def stop_task(self):
         self.logger.info("Stopping video display")
-        self._stop = True
+        self._stop.set()
         await self.task
 
     async def __call__(self):
-        while not self._stop:
+        while not self._stop.is_set():
             #Poll window manager
             key = await self.call_process(VideoDisplayProcess.waitKey, 15)
 

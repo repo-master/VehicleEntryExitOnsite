@@ -31,15 +31,15 @@ app:
         video_output: videodisplay
         output_result: dump_file
         detector:
-            model: "models/vehicles.zip"
-            detection_period: 1.0
+          model: "models/vehicles.zip"
+          detection_period: 1.0
         tracker:
           # Check out the motrackers library to find out which trackers are supported
           type: SORT
           max_lost: 8
           iou_threshold: 0.6
     dump_file:
-      type: RemoteProcess
+      type: DirectoryProcess
       properties:
         dir: "results/"
     
@@ -55,7 +55,7 @@ app:
 logger:
   version: 1
   root:
-    level: DEBUG
+    level: INFO
     handlers:
       #- log_file
       - console
@@ -78,4 +78,4 @@ logger:
       datefmt: '%Y-%m-%d %H:%M:%S'
     colorful:
       (): vehiclebot.log.ColorfulFormatter
-      apply_color_sequence: false
+      apply_color_sequence: true
