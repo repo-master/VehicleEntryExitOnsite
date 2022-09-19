@@ -5,6 +5,7 @@ from vehiclebot.task import AIOTask
 import os
 import asyncio
 import json
+import base64
 
 import numpy as np
 
@@ -55,9 +56,10 @@ class DirectoryProcess(DetectionHandler):
 
     DEFAULT_FNAME_FMT = "{first_detect_ts_fmt}_{class}_{track_id}-{age}"
 
-    def __init__(self, *args, dir : os.PathLike = "results/", filename_format : str = None, **kwargs):
+    def __init__(self, *args, dir : os.PathLike = "results/", save_mode : str = "file", filename_format : str = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.dest_dir = dir
+        self.save_mode = save_mode
         self.fname_fmt = filename_format
         if self.fname_fmt is None:
             self.fname_fmt = self.DEFAULT_FNAME_FMT
@@ -67,7 +69,13 @@ class DirectoryProcess(DetectionHandler):
             self.logger.warning("The path \"%s\" does not exist. Creating..." % self.dest_dir)
             os.makedirs(self.dest_dir)
         return await super().start_task()
-        
+    
+    def _saveMetadataObject(self, detection : dict, save_meta_file : os.PathLike):
+        if detection['is_new_detection']:
+            self.logger.debug("New detection: Saving detection to \"%s\"" % save_meta_file)
+        with open(save_meta_file, 'w') as meta_file:
+            json.dump(detection, meta_file, cls=MetadataEncoder)
+
     def _dispatchDetection(self, detection : dict):
         img_data : dict = detection.pop('img')
         if img_data is None: return
@@ -76,7 +84,9 @@ class DirectoryProcess(DetectionHandler):
         if img_data['encoding'] == 'encoded_np':
             img_bytes : np.ndarray = img_data['data']
             img_blob = img_bytes.tobytes()
-            
+        else:
+            img_blob = img_data['data']
+
         #Extra formatting data for file name
         fmt_data = {
             'first_detect_ts_fmt': detection['first_detect_ts'].strftime("%Y-%m-%d_%H-%M")
@@ -85,27 +95,41 @@ class DirectoryProcess(DetectionHandler):
         save_fullpath = os.path.join(self.dest_dir, save_fname)
         
         save_meta_file = save_fullpath + '.json'
-
-        ## Change format to one suitable for storage
-
-        #Save image as separate file
-        save_img_file = save_fullpath + img_data['format']
-        detection['img'] = {
-            'encoding': "file",
-            'file': os.path.relpath(save_img_file, self.dest_dir),
-            'format': img_data['format']
-        }
         
-        if img_blob is None:
-            self.logger.warning("Detection \"%s\" has invalid image data encoded as \"%s\"" % (save_meta_file, img_data['encoding']))
-        else:
-            if detection['is_new_detection']:
-                self.logger.debug("New detection: Saving detection to \"%s\"" % save_meta_file)
-                
+        if not isinstance(img_blob, bytes):
+            self.logger.warning("Detection \"%s\" has invalid image data encoded as \"%s\". Image may be corrupted." % (save_meta_file, img_data['encoding']))
+            
+        ## Change format to one suitable for storage
+        if self.save_mode == 'file':
+            #Save image as separate file
+            save_img_file = save_fullpath + img_data['format']
+            detection['img'] = {
+                'encoding': self.save_mode,
+                'format': img_data['format'],
+                'file': os.path.relpath(save_img_file, self.dest_dir)
+            }
+            
+            #Save the image
             with open(save_img_file, 'wb') as img_file:
                 img_file.write(img_blob)
-            with open(save_meta_file, 'w') as meta_file:
-                json.dump(detection, meta_file, cls=MetadataEncoder)
 
+            #Save metadata file
+            self._saveMetadataObject(detection, save_meta_file)
+        elif self.save_mode == 'embedded':
+            #Save image within the metadata json file
+            if img_blob is None:
+                self.logger.warning("Detection \"%s\" has invalid image data encoded as \"%s\". Image not written" % (save_meta_file, img_data['encoding']))
+            
+            detection['img'] = {
+                'encoding': self.save_mode,
+                'format': img_data['format'],
+                'blob': base64.b64encode(img_blob).decode()
+            }
+            
+            #Save metadata file
+            self._saveMetadataObject(detection, save_meta_file)
+        else:
+            raise ValueError("Invalid save mode passed \"%s\"" % self.save_mode)
+            
 class RemoteProcess(DetectionHandler):
     pass

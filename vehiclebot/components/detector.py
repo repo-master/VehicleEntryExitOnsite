@@ -15,22 +15,23 @@ from concurrent.futures import ProcessPoolExecutor
 
 #Synchronous code in isolated process
 class VehicleDetectorProcess(GlobalInstances):
-    def __init__(self, model_file : os.PathLike, tracker_opts : typing.Dict):
+    def __init__(self, model_file : os.PathLike, tracker_config : typing.Dict, output_config : typing.Dict):
         self._last_detection = None
         self._last_img = None
         self.traj = Trajectory()
+        self.opcfg = output_config
 
         #Load model file directly
         self.model = YOLOModel.fromZip(model_file) #Throws FileNotFoundError if model is not found
         
-        _tracker_type = tracker_opts.pop('type')
+        _tracker_type = tracker_config.pop('type')
         tracker_cls : typing.Type[Tracker] = getattr(motrackers, _tracker_type) #Throws AttributeError if invalid
         if not issubclass(tracker_cls, Tracker):
             raise ValueError("Tracker type \"%s\" is not a valid tracker!" % str(_tracker_type))
         
         self.tracker = tracker_cls(
             tracker_output_format='mot_challenge',
-            **tracker_opts
+            **tracker_config
         )
 
     def _detect(self, img, cache_results=True):
@@ -138,10 +139,10 @@ class VehicleDetectorProcess(GlobalInstances):
             xmin, ymin, width, height = int(xmin), int(ymin), int(width), int(height)
             
             if not trk_obj.lost and width > 0 and height > 0:
-                ENCODE_FORMAT = '.png' #TODO: move to config
+                encode_format = self.opcfg['image_format']
                 img_crop = self._crop(img, xmin, ymin, xmin+width, ymin+height)
                 if img_crop.shape[0] > 0 and img_crop.shape[1] > 0:
-                    ret, img_blob = cv2.imencode(ENCODE_FORMAT, img_crop)
+                    ret, img_blob = cv2.imencode(encode_format, img_crop)
                     if ret:
                         res_item = {
                             'track_id': trk_id,
@@ -149,7 +150,7 @@ class VehicleDetectorProcess(GlobalInstances):
                             'img': {
                                 'encoding': "encoded_np",
                                 'data': img_blob,
-                                'format': ENCODE_FORMAT
+                                'format': encode_format
                             },
                             'is_new_detection': trk_obj.age <= 1,
                             'class': cls_lbl,
@@ -165,8 +166,8 @@ class VehicleDetectorProcess(GlobalInstances):
         return results
 
     @classmethod
-    def instantiate(cls, model_file, tracker):
-        return cls.create_instance(cls(model_file, tracker))
+    def instantiate(cls, model_file, tracker, output_config):
+        return cls.create_instance(cls(model_file, tracker, output_config))
     
     @classmethod
     def detect(cls, instance, img, cache_results=True):
@@ -187,13 +188,24 @@ class VehicleDetectorProcess(GlobalInstances):
 
 class VehicleDetector(AIOTask):
     metadata : typing.Dict[str, typing.Any] = {"dependencies": []}
-    def __init__(self, tm, task_name, input_source, detector : typing.Dict, tracker: typing.Dict, video_output : str = None, output_result : str = None, **kwargs):
+    def __init__(self, tm, task_name,
+                 input_source,
+                 detector : typing.Dict,
+                 tracker: typing.Dict,
+                 output : typing.Dict = None,
+                 video_output : str = None,
+                 output_result : str = None,
+                 **kwargs):
         super().__init__(tm, task_name, **kwargs)
         self.inp_src = input_source
         self.detector_params = detector
         self.tracker_params = tracker
         self.video_output = video_output
         self.output_result = output_result
+        self.output_config = output
+        if self.output_config is None:
+            self.output_config = {"image_format": ".png"}
+
         self.detector = None
         self._stop = asyncio.Event()
         self.proc = ProcessPoolExecutor(max_workers=1, initializer=VehicleDetectorProcess.init)
@@ -212,7 +224,7 @@ class VehicleDetector(AIOTask):
     async def start_task(self):
         try:
             self.logger.info("Loading model \"%s\" for detector, and tracker using \"%s\"..." % (self.detector_params['model'], self.tracker_params['type']))
-            self.detector = await self.call_process(VehicleDetectorProcess.instantiate, self.detector_params['model'], self.tracker_params)
+            self.detector = await self.call_process(VehicleDetectorProcess.instantiate, self.detector_params['model'], self.tracker_params, self.output_config)
         except (FileNotFoundError, AttributeError, ValueError) as e:
             self.logger.exception(e)
 
@@ -251,6 +263,7 @@ class VehicleDetector(AIOTask):
                 # Show video output
                 proc_vout = self.render_results()
                 # Send results to processing stage
+                # Need to pass the image as this process is 'fire-and-forget', hence not re-entrant
                 proc_push = self.push_results(img)
                 
                 # Wait till both tasks are done
@@ -266,8 +279,6 @@ class VehicleDetector(AIOTask):
 
     async def push_results(self, img):
         if self.output_result is not None:
-            detections_data = self.call_process(VehicleDetectorProcess.cropAndProcessTracks, self.detector, img)
-            dispatch_tasks = self.output_result
-            if isinstance(dispatch_tasks, str): dispatch_tasks = [dispatch_tasks]
-            out_tasks = [self.tm[x].processDetection(detections_data) for x in dispatch_tasks]
-            await asyncio.gather(*out_tasks)
+            detections_data_task = self.call_process(VehicleDetectorProcess.cropAndProcessTracks, self.detector, img)
+            await self.tm[self.output_result].processDetection(detections_data_task)
+

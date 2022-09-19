@@ -28,7 +28,7 @@ def constr_config_external(loader : Loader, node : Node):
     elif key_src == 'SITE_KEY':
         return load_env_key_or_log("SITE_KEY")
     else:
-        raise ValueError("Incorrect key source \"%s\" for site key. Please only use one of %s, or use values in config file directly." % (
+        raise ValueError("Incorrect source \"%s\" for env. Please only use one of %s, or use values in config file directly." % (
             key_src,
             ','.join(['SITE_ID', 'SITE_KEY'])
         ))

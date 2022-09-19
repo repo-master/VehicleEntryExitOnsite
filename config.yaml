@@ -38,10 +38,22 @@ app:
           type: SORT
           max_lost: 8
           iou_threshold: 0.6
+        output:
+          image_format: .png
     dump_file:
       type: DirectoryProcess
       properties:
+        ### Properties applicable to DirectoryProcess
+        
+        #dir - Absolute/Relative path to save results to
+        # The results are saved as a .json file for each detection, and can contain additional files depending
+        # on the mode selected
         dir: "results/"
+
+        #save_mode - How to save result images:
+        #  "file" - Image will be saved separate from the json file, with a "file" property pointing to it
+        #  "embedded" - Image data will be base64-encoded and written within the json file in the "blob" property
+        save_mode: embedded
     
     #Show video windows to display what is happening
     videodisplay:
