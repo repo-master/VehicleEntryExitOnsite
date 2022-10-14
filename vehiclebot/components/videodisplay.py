@@ -4,12 +4,16 @@ from vehiclebot.task import AIOTask
 import asyncio
 import typing
 import cv2
+from decouple import config
 
 from concurrent.futures import ProcessPoolExecutor
+
+HEADLESS = config('HEADLESS', cast=bool, default=False)
 
 class VideoDisplayProcess:
     @staticmethod
     def imshow(window_name, img):
+        if HEADLESS: return
         cv2.imshow(window_name, img)
     
     @staticmethod

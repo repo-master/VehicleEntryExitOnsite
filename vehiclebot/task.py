@@ -58,7 +58,7 @@ class TaskManager(object):
             task_module = importlib.import_module(imp_mod)
             task_cls = getattr(task_module, imp_cls_name)
         except (ImportError, AttributeError):
-            self.logger.error("Unable to load task plugin \"%s\" from module \"%s\". Make sure the module exists. Skipping" % (imp_cls_name, imp_mod))
+            self.logger.exception("Unable to load task plugin \"%s\" from module \"%s\". Make sure the module exists. Skipping" % (imp_cls_name, imp_mod))
             return
         if not issubclass(task_cls, AIOTask):
             self.logger.error("Cannot load task \"%s\". It must be of type AIOTask. Skipping" % imp_cls_name)

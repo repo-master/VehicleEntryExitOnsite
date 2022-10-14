@@ -3,8 +3,14 @@ app:
   #Config for customer requirements
   customer:
     #Information of the parking site (to associate data with). site_key is the password to authenticate
-    site_id: !env SITE_ID    #Load id from environment variable
-    site_key: !env SITE_KEY  #Load key from environment variable
+    
+    #
+    # Use the following to retrieve the information from the environment variables
+    # site_id: !env SITE_ID    #Load id from environment variable
+    # site_key: !env SITE_KEY  #Load key from environment variable
+    #
+    site_id: 0
+    site_key: secret
     
     #All connected cameras
     cameras:

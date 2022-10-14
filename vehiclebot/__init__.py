@@ -80,8 +80,9 @@ async def VehicleEntryExitOnSite(loop : asyncio.AbstractEventLoop = None, debug 
     root_logger.debug("AIO cleanup tasks created")
 
     #Management pages
-    init_routes(app)
-    root_logger.info("Management routes added")
+    if "management" in app.cfg:
+        init_routes(app)
+        root_logger.info("Management routes added")
     
     root_logger.info("Application now ready to launch")
     return app

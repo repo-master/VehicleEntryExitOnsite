@@ -19,7 +19,7 @@ def constr_config_external(loader : Loader, node : Node):
         try:
             return deconf(key, cast=cast)
         except UndefinedValueError:
-            logger.exception("%s variable is not set in the environment variables, but was requested to source this value from the environment variables. Please set this value correctly." % key)
+            logger.error("%s variable is not set in the environment variables, but was requested to source this value from the environment variables. Please set this value correctly." % key)
             return
 
     #Only allow access to predefined keys in environment vars
@@ -28,10 +28,7 @@ def constr_config_external(loader : Loader, node : Node):
     elif key_src == 'SITE_KEY':
         return load_env_key_or_log("SITE_KEY")
     else:
-        raise ValueError("Incorrect source \"%s\" for env. Please only use one of %s, or use values in config file directly." % (
-            key_src,
-            ','.join(['SITE_ID', 'SITE_KEY'])
-        ))
+        return load_env_key_or_log(key_src)
 
 def constr_base_append(loader : Loader, node : Node):
     pass

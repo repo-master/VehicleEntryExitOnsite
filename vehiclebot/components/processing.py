@@ -76,6 +76,10 @@ class DirectoryProcess(DetectionHandler):
         with open(save_meta_file, 'w') as meta_file:
             json.dump(detection, meta_file, cls=MetadataEncoder)
 
+    def _saveImageObject(self, img_blob : bytes, save_img_file : os.PathLike):
+        with open(save_img_file, 'wb') as img_file:
+            img_file.write(img_blob)
+            
     def _dispatchDetection(self, detection : dict):
         img_data : dict = detection.pop('img')
         if img_data is None: return
@@ -83,6 +87,7 @@ class DirectoryProcess(DetectionHandler):
 
         if img_data['encoding'] == 'encoded_np':
             img_bytes : np.ndarray = img_data['data']
+            assert isinstance(img_bytes, np.ndarray)
             img_blob = img_bytes.tobytes()
         else:
             img_blob = img_data['data']
@@ -110,9 +115,8 @@ class DirectoryProcess(DetectionHandler):
             }
             
             #Save the image
-            with open(save_img_file, 'wb') as img_file:
-                img_file.write(img_blob)
-
+            self._saveImageObject(img_blob, save_img_file)
+            
             #Save metadata file
             self._saveMetadataObject(detection, save_meta_file)
         elif self.save_mode == 'embedded':
