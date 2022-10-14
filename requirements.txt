@@ -1,7 +1,6 @@
 aiohttp==3.8.1
 aiosignal==1.2.0
 async-timeout==4.0.2
-gunicorn==20.1.0
 -e git+https://github.com/adipandas/multi-object-tracker.git@bfbc2b1a357ab1fa27a5eaef86430559e9ee58ca#egg=multi_object_tracker
 ipyfilechooser==0.6.0
 numpy==1.23.2

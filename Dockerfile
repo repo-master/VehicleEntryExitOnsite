@@ -12,6 +12,7 @@ RUN apt-get -y install ffmpeg
 
 #Install package dependencies
 RUN pip install --upgrade pip
+RUN pip install gunicorn
 RUN pip install -r requirements.txt
 
 #Copy the project
@@ -19,4 +20,6 @@ COPY . .
 
 EXPOSE 8080
 
-CMD ["python", "-u", "VehicleEntryExitOnsite.py", "-p", "8080"]
+ENV HEADLESS True
+
+CMD [ "gunicorn", "vehiclebot:VehicleEntryExitOnSite", "--bind", "0.0.0.0:8080", "--worker-class", "aiohttp.GunicornWebWorker" ]

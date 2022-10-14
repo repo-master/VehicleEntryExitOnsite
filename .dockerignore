@@ -1,0 +1,6 @@
+**/__pycache__
+*.pyproj
+*.sln
+**/*.log
+*.user
+.vs/
