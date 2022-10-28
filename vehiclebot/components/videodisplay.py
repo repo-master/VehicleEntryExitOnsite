@@ -12,6 +12,13 @@ HEADLESS = config('HEADLESS', cast=bool, default=False)
 
 class VideoDisplayProcess:
     @staticmethod
+    def makeDPIAware():
+        #Windows's scaling issue
+        import ctypes
+        if hasattr(ctypes, 'windll'):
+            ctypes.windll.user32.SetProcessDPIAware()
+        
+    @staticmethod
     def imshow(window_name, img):
         if HEADLESS: return
         cv2.imshow(window_name, img)
@@ -28,7 +35,7 @@ class VideoDisplay(AIOTask):
     def __init__(self, tm, task_name, **kwargs):
         super().__init__(tm, task_name, **kwargs)
         self._stop = asyncio.Event()
-        self.proc = ProcessPoolExecutor(max_workers=1)
+        self.proc = ProcessPoolExecutor(max_workers=1, initializer=VideoDisplayProcess.makeDPIAware)
     
     def call_process(self, func, *args) -> asyncio.Future:
         task = asyncio.get_event_loop().run_in_executor(self.proc, func, *args)
