@@ -14,10 +14,28 @@ app:
     
     #All connected cameras
     cameras:
-      - camera1: &primary_camera
-          #Which camera device to use (index or url for ip camera)
+      - webcam:
           src: 0
-          skip_frames: 0
+
+      - camera1:
+          #Hint at what type of camera it is
+          kind: ipcamera
+
+          src: rtsp://admin:@192.168.0.20:80/ch0_0.264
+
+          protocol: rtsp
+          authentication:
+            username: admin
+            password: 
+          stream_path: /ch0_0.264
+
+      - prerecorded: &primary_camera
+          #Hint at what type of camera is being pointed
+          kind: media
+          #Which camera device to use (index, path or url of stream)
+          src: 0
+          skip_frames: 420
+          throttle_fps: 100
 
   api:
     api_base: http://localhost:5000/
@@ -29,13 +47,14 @@ app:
       type: CameraSource
       properties:
         <<: *primary_camera
-        video_output: videodisplay
+        #video_output: vidstream_main
+
     vehicle_detector:
       type: VehicleDetector
       properties:
         input_source: camera_source
-        video_output: videodisplay
-        output_result: dump_file
+        video_output: vidstream_main
+        output_result: dump_rtc
         detector:
           model: "models/vehicles.zip"
           detection_period: 1.0
@@ -46,24 +65,18 @@ app:
           iou_threshold: 0.6
         output:
           image_format: .png
-    dump_file:
-      type: DirectoryProcess
-      properties:
-        ### Properties applicable to DirectoryProcess
-        
-        #dir - Absolute/Relative path to save results to
-        # The results are saved as a .json file for each detection, and can contain additional files depending
-        # on the mode selected
-        dir: "results/"
 
-        #save_mode - How to save result images:
-        #  "file" - Image will be saved separate from the json file, with a "file" property pointing to it
-        #  "embedded" - Image data will be base64-encoded and written within the json file in the "blob" property
-        save_mode: embedded
-    
-    #Show video windows to display what is happening
-    videodisplay:
-      type: VideoDisplay
+    dump_rtc:
+      type: vehiclebot.components.rtc.rtcprocess.RTCDataProcess
+      properties:
+        plate_decoder: plate_detect
+
+    plate_detect:
+      type: vehiclebot.components.plate.PlateRecogniser
+
+    #RTC stream tracks
+    vidstream_main:
+      type: RTCStreamTrack
 
   #Management web server
   management:

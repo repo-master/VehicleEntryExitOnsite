@@ -1,10 +1,11 @@
-aiohttp==3.8.1
-aiosignal==1.2.0
-async-timeout==4.0.2
+aiohttp
+aiortc
+aiosignal
+async-timeout
 -e git+https://github.com/adipandas/multi-object-tracker.git@bfbc2b1a357ab1fa27a5eaef86430559e9ee58ca#egg=multi_object_tracker
-ipyfilechooser==0.6.0
-numpy==1.23.2
-opencv-contrib-python==4.6.0.66
-python-decouple==3.6
-PyYAML==6.0
-scipy==1.9.0
+ipyfilechooser
+numpy
+opencv-contrib-python
+python-decouple
+PyYAML
+scipy

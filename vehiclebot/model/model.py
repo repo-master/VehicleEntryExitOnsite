@@ -5,20 +5,22 @@ import typing
 import zipfile
 
 import cv2
-import numpy.typing as npt
+import numpy as np
 
 class Model:
-    def __init__(self, net : cv2.dnn.Net, class_labels : typing.List[str], metadata : typing.Dict = dict()):
-        self._net : cv2.dnn.Net = net
+    def __init__(self, net, class_labels : typing.List[str] = None, metadata : typing.Dict = dict()):
+        self._net = net
         self._meta = metadata
         self.class_labels = class_labels
     
-    def detect(self, img : npt.ArrayLike, *args, **kwargs):
+    def detect(self, img : np.ndarray, *args, **kwargs):
         pass
 
     def getLabel(self, idx : int) -> str:
+        if not self.class_labels: return
         return self.class_labels[idx]
-
+    
+class CV2ModelZipped(Model):
     @classmethod
     def fromZip(cls, model_zip_file : os.PathLike):
         with zipfile.ZipFile(model_zip_file, 'r') as zf:
@@ -60,3 +62,13 @@ class Model:
             return net_fn(buf)
         except KeyError:
             raise ValueError("The provided framework '%s' is not supported" % framework)
+
+class HFTransformerModel(Model):
+    @classmethod
+    def fromHuggingFace(cls, model_path : str):
+        return cls(**cls._loadTransformer(model_path))
+
+    #Depends on type of model
+    @classmethod
+    def _loadTransformer(cls, model_path : str) -> dict:
+        raise NotImplementedError()

@@ -25,17 +25,24 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="vehiclebot\components\plate.py" />
     <Compile Include="vehiclebot\components\remoteprocess\awsprocess.py" />
     <Compile Include="vehiclebot\components\camera.py" />
     <Compile Include="vehiclebot\components\detector.py" />
     <Compile Include="vehiclebot\components\filter.py" />
     <Compile Include="vehiclebot\components\processing.py" />
+    <Compile Include="vehiclebot\components\rtc\rtcprocess.py" />
+    <Compile Include="vehiclebot\components\rtc\rtcstream.py" />
     <Compile Include="vehiclebot\components\videodisplay.py" />
     <Compile Include="vehiclebot\components\__init__.py" />
     <Compile Include="vehiclebot\config.py" />
     <Compile Include="vehiclebot\log.py" />
+    <Compile Include="vehiclebot\management\rtc.py" />
     <Compile Include="vehiclebot\management\__init__.py" />
+    <Compile Include="vehiclebot\model\augmented_filter.py" />
+    <Compile Include="vehiclebot\model\filter.py" />
     <Compile Include="vehiclebot\model\model.py" />
+    <Compile Include="vehiclebot\model\ocr.py" />
     <Compile Include="vehiclebot\model\yolodnn.py" />
     <Compile Include="vehiclebot\model\__init__.py" />
     <Compile Include="vehiclebot\multitask.py" />
@@ -51,8 +58,13 @@
     <InterpreterReference Include="Global|VisualStudio|Work venv (Python 3.9 (64-bit))" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="static\" />
+    <Folder Include="static\css\" />
+    <Folder Include="static\js\" />
+    <Folder Include="templates\" />
     <Folder Include="vehiclebot\" />
     <Folder Include="vehiclebot\components\" />
+    <Folder Include="vehiclebot\components\rtc\" />
     <Folder Include="vehiclebot\components\remoteprocess\" />
     <Folder Include="vehiclebot\model\" />
     <Folder Include="vehiclebot\management\" />
@@ -66,6 +78,53 @@
     <Content Include="Dockerfile" />
     <Content Include="README.md" />
     <Content Include="requirements.txt" />
+    <Content Include="static\css\bootstrap-grid.css" />
+    <Content Include="static\css\bootstrap-grid.css.map" />
+    <Content Include="static\css\bootstrap-grid.min.css" />
+    <Content Include="static\css\bootstrap-grid.min.css.map" />
+    <Content Include="static\css\bootstrap-grid.rtl.css" />
+    <Content Include="static\css\bootstrap-grid.rtl.css.map" />
+    <Content Include="static\css\bootstrap-grid.rtl.min.css" />
+    <Content Include="static\css\bootstrap-grid.rtl.min.css.map" />
+    <Content Include="static\css\bootstrap-reboot.css" />
+    <Content Include="static\css\bootstrap-reboot.css.map" />
+    <Content Include="static\css\bootstrap-reboot.min.css" />
+    <Content Include="static\css\bootstrap-reboot.min.css.map" />
+    <Content Include="static\css\bootstrap-reboot.rtl.css" />
+    <Content Include="static\css\bootstrap-reboot.rtl.css.map" />
+    <Content Include="static\css\bootstrap-reboot.rtl.min.css" />
+    <Content Include="static\css\bootstrap-reboot.rtl.min.css.map" />
+    <Content Include="static\css\bootstrap-utilities.css" />
+    <Content Include="static\css\bootstrap-utilities.css.map" />
+    <Content Include="static\css\bootstrap-utilities.min.css" />
+    <Content Include="static\css\bootstrap-utilities.min.css.map" />
+    <Content Include="static\css\bootstrap-utilities.rtl.css" />
+    <Content Include="static\css\bootstrap-utilities.rtl.css.map" />
+    <Content Include="static\css\bootstrap-utilities.rtl.min.css" />
+    <Content Include="static\css\bootstrap-utilities.rtl.min.css.map" />
+    <Content Include="static\css\bootstrap.css" />
+    <Content Include="static\css\bootstrap.css.map" />
+    <Content Include="static\css\bootstrap.min.css" />
+    <Content Include="static\css\bootstrap.min.css.map" />
+    <Content Include="static\css\bootstrap.rtl.css" />
+    <Content Include="static\css\bootstrap.rtl.css.map" />
+    <Content Include="static\css\bootstrap.rtl.min.css" />
+    <Content Include="static\css\bootstrap.rtl.min.css.map" />
+    <Content Include="static\dashboard.js" />
+    <Content Include="static\js\bootstrap.bundle.js" />
+    <Content Include="static\js\bootstrap.bundle.js.map" />
+    <Content Include="static\js\bootstrap.bundle.min.js" />
+    <Content Include="static\js\bootstrap.bundle.min.js.map" />
+    <Content Include="static\js\bootstrap.esm.js" />
+    <Content Include="static\js\bootstrap.esm.js.map" />
+    <Content Include="static\js\bootstrap.esm.min.js" />
+    <Content Include="static\js\bootstrap.esm.min.js.map" />
+    <Content Include="static\js\bootstrap.js" />
+    <Content Include="static\js\bootstrap.js.map" />
+    <Content Include="static\js\bootstrap.min.js" />
+    <Content Include="static\js\bootstrap.min.js.map" />
+    <Content Include="templates\dashboard.j2.html" />
+    <Content Include="templates\base.j2.html" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in

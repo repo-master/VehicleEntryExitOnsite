@@ -1,6 +1,7 @@
 
 import typing
 from vehiclebot.task import AIOTask
+from vehiclebot.patches import JSONifier
 
 import os
 import asyncio
@@ -9,14 +10,6 @@ import base64
 
 import numpy as np
 
-import datetime
-
-class MetadataEncoder(json.JSONEncoder):
-    def default(self, obj : typing.Any):
-        if isinstance(obj, datetime.datetime):
-            return obj.isoformat()
-        return json.JSONEncoder.default(self, obj)
-    
 class DetectionHandler(AIOTask):
     '''
     Send detection data to a remote service for further processing.
@@ -74,7 +67,7 @@ class DirectoryProcess(DetectionHandler):
         if detection['is_new_detection']:
             self.logger.debug("New detection: Saving detection to \"%s\"" % save_meta_file)
         with open(save_meta_file, 'w') as meta_file:
-            json.dump(detection, meta_file, cls=MetadataEncoder)
+            json.dump(detection, meta_file, cls=JSONifier, default=str)
 
     def _saveImageObject(self, img_blob : bytes, save_img_file : os.PathLike):
         with open(save_img_file, 'wb') as img_file:

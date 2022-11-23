@@ -1,9 +1,9 @@
 
 import datetime
 from vehiclebot.task import AIOTask
-from vehiclebot.multitask import GlobalInstances
+from vehiclebot.multitask import AsyncProcess
 
-from vehiclebot.model import YOLOModel
+from vehiclebot.model import YoloModelCV2
 from vehiclebot.tracker import Trajectory, TRACK_COLORS, Tracker, motrackers
 
 import os
@@ -11,18 +11,16 @@ import cv2
 import asyncio
 import typing
 
-from concurrent.futures import ProcessPoolExecutor
-
 #Synchronous code in isolated process
-class VehicleDetectorProcess(GlobalInstances):
-    def __init__(self, model_file : os.PathLike, tracker_config : typing.Dict, output_config : typing.Dict):
+class VehicleDetectorProcess:
+    def __init__(self, model_file : os.PathLike, tracker_config : dict, output_config : dict):
         self._last_detection = None
         self._last_img = None
         self.traj = Trajectory()
         self.opcfg = output_config
 
         #Load model file directly
-        self.model = YOLOModel.fromZip(model_file) #Throws FileNotFoundError if model is not found
+        self.model = YoloModelCV2.fromZip(model_file) #Throws FileNotFoundError if model is not found
         
         _tracker_type = tracker_config.pop('type')
         tracker_cls : typing.Type[Tracker] = getattr(motrackers, _tracker_type) #Throws AttributeError if invalid
@@ -34,12 +32,13 @@ class VehicleDetectorProcess(GlobalInstances):
             **tracker_config
         )
 
-    def _detect(self, img, cache_results=True):
-        self._last_detection = self.model.detect(img, zip_results=False, label_str=False)
-        if cache_results: self._last_img = img
+    def detect(self, img):
+        self._last_detection = self.model.detect(img, zip_results=False, label_str=False, min_score=0.2)
+        self._last_img = img
         
-    def _updateTracker(self):
-        output_tracks = self.tracker.update(*self._last_detection)        
+    def updateTracker(self):
+        output_tracks = self.tracker.update(*self._last_detection)
+        self._updateUnmatchedTracks()
         for trk in output_tracks:
             trk_id = trk[1]
             trk_obj = self.tracker.tracks[trk_id]
@@ -52,7 +51,14 @@ class VehicleDetectorProcess(GlobalInstances):
             xcentroid, ycentroid = xmin + 0.5*width, ymin + 0.5*height
             #Update trajectory of this track
             self.traj.update(trk_id, (xcentroid, ycentroid))
-    
+
+    def _updateUnmatchedTracks(self):
+        output_tracks = self.tracker.tracks
+        for trk_id, trk_obj in output_tracks.items():
+            if trk_obj.lost:
+                pass
+                #print(trk_id, "is lost", flush=True)
+
     def _drawTrackBBoxes(self, img):
         output_tracks = self.tracker.tracks #So that we can get all tracks instead of active ones
         for _, trk_obj in output_tracks.items():
@@ -76,7 +82,7 @@ class VehicleDetectorProcess(GlobalInstances):
             xmin, ymin, width, height = int(xmin), int(ymin), int(width), int(height)
             xcentroid, ycentroid = int(xcentroid), int(ycentroid)
         
-            txt_str = "Class: {label} ({conf:.2f}%)".format(label=cls_lbl, conf=conf*100)
+            txt_str = "{confidence:.2f}%".format(confidence=conf*100)
             trk_text = "ID {}".format(trk_id) + (' LOST' if trk_obj.lost else '')
             
             ##Drawing
@@ -87,15 +93,15 @@ class VehicleDetectorProcess(GlobalInstances):
             txt_pos = [xmin, ymin]
             txt_pos[0] = max(txt_pos[0], 2)
             txt_pos[1] = max(txt_pos[1]-8, 10)
-            cv2.putText(img, txt_str, txt_pos, cv2.FONT_HERSHEY_COMPLEX, 0.4, (0, 0, 0), lineType=cv2.LINE_AA, thickness=2)
-            cv2.putText(img, txt_str, txt_pos, cv2.FONT_HERSHEY_COMPLEX, 0.4, (200, 255, 255), lineType=cv2.LINE_AA, thickness=1)
+            cv2.putText(img, txt_str, txt_pos, cv2.FONT_HERSHEY_COMPLEX, 0.9, (0, 0, 0), lineType=cv2.LINE_AA, thickness=2)
+            cv2.putText(img, txt_str, txt_pos, cv2.FONT_HERSHEY_COMPLEX, 0.9, (200, 255, 255), lineType=cv2.LINE_AA, thickness=1)
             #Track id
-            cv2.putText(img, trk_text, (xcentroid - 10, ycentroid - height//2 + 12), cv2.FONT_HERSHEY_SIMPLEX, 0.3 if trk_obj.lost else 0.5, (0, 0, 0), lineType=cv2.LINE_AA, thickness=2)
-            cv2.putText(img, trk_text, (xcentroid - 10, ycentroid - height//2 + 12), cv2.FONT_HERSHEY_SIMPLEX, 0.3 if trk_obj.lost else 0.5, trk_color, lineType=cv2.LINE_AA, thickness=1)
+            cv2.putText(img, trk_text, (xcentroid - 10, ycentroid - height//2 - 16), cv2.FONT_HERSHEY_SIMPLEX, 1.5 if trk_obj.lost else 1.2, (0, 0, 0), lineType=cv2.LINE_AA, thickness=4)
+            cv2.putText(img, trk_text, (xcentroid - 10, ycentroid - height//2 - 16), cv2.FONT_HERSHEY_SIMPLEX, 1.5 if trk_obj.lost else 1.2, trk_color, lineType=cv2.LINE_AA, thickness=2)
             #Track center
             cv2.circle(img, (xcentroid, ycentroid), 4, trk_color, -1)
             
-    def _drawTracks(self, img=None):
+    def drawTracks(self, img=None):
         if img is None:
             if self._last_img is None: return
             img = self._last_img.copy()
@@ -112,7 +118,7 @@ class VehicleDetectorProcess(GlobalInstances):
         y2 = max(y2, 0)
         return img[y1:y2,x1:x2]
 
-    def _cropAndProcessTracks(self, img=None):
+    def cropAndProcessTracks(self, img=None):
         results = []
         if img is None:
             if self._last_img is None: return results
@@ -133,8 +139,10 @@ class VehicleDetectorProcess(GlobalInstances):
             if hasattr(trk_obj, 'update_ts'):
                 update_ts = trk_obj.update_ts
             traj_dir_angle = self.traj[trk_id]['dir']
-            traj_dir_mv = self.traj.estimatedCardinalDirection(trk_id)
-
+            traj_dir_mv = self.traj[trk_id]['cardinal']
+            traj_mv_spd = self.traj[trk_id]['speed']
+            traj_is_mv = self.traj[trk_id]['is_moving']
+            
             #Integer to crop
             xmin, ymin, width, height = int(xmin), int(ymin), int(width), int(height)
             
@@ -158,6 +166,8 @@ class VehicleDetectorProcess(GlobalInstances):
                             'bbox': (xmin, ymin, width, height),
                             'first_detect_ts': detect_ts,
                             'last_update_ts': update_ts,
+                            'movement_speed': traj_mv_spd,
+                            'is_moving': traj_is_mv,
                             'estimated_movement_angle': traj_dir_angle,
                             'estimated_movement_direction': traj_dir_mv
                         }
@@ -165,28 +175,7 @@ class VehicleDetectorProcess(GlobalInstances):
 
         return results
 
-    @classmethod
-    def instantiate(cls, model_file, tracker, output_config):
-        return cls.create_instance(cls(model_file, tracker, output_config))
-    
-    @classmethod
-    def detect(cls, instance, img, cache_results=True):
-        return cls.get_instance(instance)._detect(img, cache_results)
-    
-    @classmethod
-    def updateTracker(cls, instance):
-        return cls.get_instance(instance)._updateTracker()
-        
-    @classmethod
-    def drawTracks(cls, instance, img=None):
-        return cls.get_instance(instance)._drawTracks(img)
-
-    @classmethod
-    def cropAndProcessTracks(cls, instance, img=None):
-        return cls.get_instance(instance)._cropAndProcessTracks(img)
-
-
-class VehicleDetector(AIOTask):
+class VehicleDetector(AIOTask, AsyncProcess):
     metadata : typing.Dict[str, typing.Any] = {"dependencies": []}
     def __init__(self, tm, task_name,
                  input_source,
@@ -206,44 +195,37 @@ class VehicleDetector(AIOTask):
         if self.output_config is None:
             self.output_config = {"image_format": ".png"}
 
-        self.detector = None
+        self.detector : VehicleDetectorProcess = None
         self._stop = asyncio.Event()
-        self.proc = ProcessPoolExecutor(max_workers=1, initializer=VehicleDetectorProcess.init)
+        self.prepareProcess()
         self.logger.info("Started Detector worker process")
-
-    def call_process(self, func, *args) -> asyncio.Future:
-        task = asyncio.get_event_loop().run_in_executor(self.proc, func, *args)
-        task.add_done_callback(self._proc_done_callback)
-        return task
-
-    def _proc_done_callback(self, future : asyncio.Future):
-        exc = future.exception()
-        if exc:
-            self.logger.exception(exc)
-    
+        
     async def start_task(self):
         try:
             self.logger.info("Loading model \"%s\" for detector, and tracker using \"%s\"..." % (self.detector_params['model'], self.tracker_params['type']))
-            self.detector = await self.call_process(VehicleDetectorProcess.instantiate, self.detector_params['model'], self.tracker_params, self.output_config)
-        except (FileNotFoundError, AttributeError, ValueError) as e:
-            self.logger.exception(e)
-
-        if self.output_result not in self.tm.tasks:
-            raise ValueError("Required task \"%s\" is not loaded" % self.output_result)
-        
-        # if not isinstance(self.tm[self.output_result], DetectionHandler):
-
+            self.detector = await self.asyncCreate(VehicleDetectorProcess, self.detector_params['model'], self.tracker_params, self.output_config)
+        except (FileNotFoundError, AttributeError, ValueError):
+            self.logger.exception("Error loading detection model")
+            
     async def stop_task(self):
         self._stop.set()
         await self.task
-        self.proc.shutdown()
+        self.endProcess()
 
     async def __call__(self):
         try:
             cap = self.tm[self.inp_src]
         except KeyError:
-            self.logger.warning("Input source component \"%s\" is not loaded. Please check your config file to make sure it is properly configured." % self.inp_src)
+            self.logger.error("Input source component \"%s\" is not loaded. Please check your config file to make sure it is properly configured." % self.inp_src)
             return
+        
+        if self.output_result is not None:
+            if self.output_result not in self.tm.tasks:
+                self.logger.error("Required task \"%s\" is not loaded" % self.output_result)
+                return
+            
+            #TODO
+            # if not isinstance(self.tm[self.output_result], DetectionHandler):
 
         '''
         Operation:
@@ -256,9 +238,9 @@ class VehicleDetector(AIOTask):
             img = cap.frame
             if img is not None:
                 # Perform detection using the DNN model
-                await self.call_process(VehicleDetectorProcess.detect, self.detector, img)
+                await self.detector.detect(img)
                 # and then perform object tracking
-                await self.call_process(VehicleDetectorProcess.updateTracker, self.detector)
+                await self.detector.updateTracker()
 
                 # Show video output
                 proc_vout = self.render_results()
@@ -272,13 +254,12 @@ class VehicleDetector(AIOTask):
     async def render_results(self):
         if self.video_output is not None:
             #Draw tracks on the frame
-            img_drawn = await self.call_process(VehicleDetectorProcess.drawTracks, self.detector)
+            img_drawn = await self.detector.drawTracks()
             if img_drawn is None: return
             vidisplay = self.tm[self.video_output]
             await vidisplay.imshow("Detections", img_drawn)
 
     async def push_results(self, img):
         if self.output_result is not None:
-            detections_data_task = self.call_process(VehicleDetectorProcess.cropAndProcessTracks, self.detector, img)
+            detections_data_task = self.detector.cropAndProcessTracks(img)
             await self.tm[self.output_result].processDetection(detections_data_task)
-

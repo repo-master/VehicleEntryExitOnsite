@@ -1,18 +1,21 @@
 
-from .model import Model
+from .model import Model, CV2ModelZipped, HFTransformerModel
+
+import numpy as np
+import typing
 
 import cv2
-import numpy as np
-import numpy.typing as npt
+from transformers import AutoFeatureExtractor, AutoModelForObjectDetection
 
 class YOLOModel(Model):
+    _NEED_UNSCALE = False
     def detect(self,
-                   img : npt.ArrayLike,
-                   zip_results : bool = True,
-                   label_str : bool = False,
-                   min_confidence : float = 0.55,
-                   min_score : float = 0.6,
-                   min_nms : float = 0.45):
+        img : np.ndarray,
+        zip_results : bool = True,
+        label_str : bool = False,
+        min_confidence : float = 0.55,
+        min_score : float = 0.6,
+        min_nms : float = 0.45):
         
         blob = self._phase_preprocess(img)
         outputs = self._phase_forward(blob)
@@ -21,36 +24,41 @@ class YOLOModel(Model):
         if zip_results: detections = self._phase_zip(detections)
         return detections
 
-    def _phase_preprocess(self, img : npt.ArrayLike):
-        return cv2.dnn.blobFromImage(img, 1 / 255.0, self._meta['net_input_size'],
-            swapRB=True, crop=False)
+    def _phase_preprocess(self, img : np.ndarray):
+        raise NotImplementedError()
     
-    def _phase_forward(self, inp : npt.ArrayLike):
-        self._net.setInput(inp)
-        return self._net.forward(self._net.getUnconnectedOutLayersNames())
+    def _phase_forward(self, inp):
+        raise NotImplementedError()
     
     def _phase_unwrap(self,
-                      img_orig : npt.ArrayLike, detections,
+                      img_orig : np.ndarray,
+                      detections,
                       min_confidence : float,
                       min_score : float,
-                      label_str : bool) -> tuple:
+                      label_str : bool) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
         class_ids = []
         confidences = []
         boxes = []
         
         rows = detections[0].shape[1]
         image_height, image_width = img_orig.shape[:2]
-
-        #Since we resized image to fit YOLO's layer shape, we need to rescale points to original
-        x_factor = image_width / self._meta['net_input_size'][0]
-        y_factor =  image_height / self._meta['net_input_size'][1]
         
+        #Since we resized image to fit YOLO's layer shape, we need to rescale points to original
+        if self._NEED_UNSCALE:
+            net_size = self._meta['net_input_size']
+            x_factor = image_width / net_size[0]
+            y_factor =  image_height / net_size[1]
+        else:
+            x_factor = 1
+            y_factor = 1
+
         for r in range(rows):
             row = detections[0][0][r]
             confidence = row[4]
             if confidence >= min_confidence:
                 classes_scores = row[5:]
                 class_id = np.argmax(classes_scores)
+                #Cull low score results
                 if classes_scores[class_id] > min_score:
                     confidences.append(confidence)
                     class_ids.append(class_id)
@@ -66,7 +74,8 @@ class YOLOModel(Model):
         
         if label_str:
             class_ids = list(map(self.getLabel, class_ids))
-        return np.array(boxes), np.array(confidences), np.array(class_ids)
+
+        return (np.array(boxes), np.array(confidences), np.array(class_ids))
 
     def _phase_nms(self, detections : tuple, min_confidence : float, min_nms : float) -> tuple:
         boxes, confidences, class_ids = detections
@@ -75,3 +84,80 @@ class YOLOModel(Model):
 
     def _phase_zip(self, detections : tuple) -> list:
         return list(zip(*detections))
+
+class YoloModelCV2(CV2ModelZipped, YOLOModel):
+    _NEED_UNSCALE = True
+    def _phase_preprocess(self, img : np.ndarray):
+        frame_size = self._meta['net_input_size']
+
+        cropped_img = img
+        
+        real_h, real_w = img.shape[:2]
+        dnn_w, dnn_h = frame_size
+        scale_x = real_w/dnn_w
+        scale_y = real_h/dnn_h
+
+        new_wh1 = (real_w, dnn_h*scale_x)
+        new_wh2 = (dnn_w*scale_y, real_h)
+
+        bestfit_wh = (int(min(new_wh1[0], new_wh2[0])), int(min(new_wh1[1], new_wh2[1])))
+        gapx, gapy = real_w-bestfit_wh[0], real_h-bestfit_wh[1]
+        
+        if gapy > 0:
+            cy1 = gapy//2
+            cy2 = cropped_img.shape[0]-cy1
+            cropped_img = cropped_img[cy1:cy2,:,:]
+            
+        return cv2.dnn.blobFromImage(img, 1 / 255.0, frame_size,
+            swapRB=True, crop=False)
+    
+    def _phase_forward(self, inp : np.ndarray):
+        self._net.setInput(inp)
+        return self._net.forward(self._net.getUnconnectedOutLayersNames())
+    
+class YOLOModelTransformers(HFTransformerModel, YOLOModel):
+    '''
+    Model to detect objects using the HuggingFace Transformers API
+    '''
+    @classmethod
+    def _loadTransformer(cls, model_path : str) -> dict:
+        net = {
+            'exractor': AutoFeatureExtractor.from_pretrained(model_path),
+            'detector': AutoModelForObjectDetection.from_pretrained(model_path)
+        }
+        labels = ["license-plates"]
+        meta = {}
+        
+        return {
+            "net" : net,
+            "class_labels": labels,
+            "metadata" : meta
+        }
+
+    def _phase_preprocess(self, img : np.ndarray):
+        return self._net['exractor'](images=img, return_tensors="pt")
+        
+    def _phase_forward(self, inp : dict):
+        return self._net['detector'](**inp)
+        
+    def _phase_unwrap(self,
+                      img_orig : np.ndarray,
+                      detections,
+                      min_confidence : float,
+                      min_score : float,
+                      label_str : bool) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        class_ids = []
+        confidences = []
+        boxes = []
+        
+        results = self._net['exractor'].post_process_object_detection(detections, threshold=min_confidence, target_sizes=[img_orig.shape[:2]])
+        #0th because one image, but loop in all detections
+        result = results[0]
+        for score, label, box in zip(result["scores"], result["labels"], result["boxes"]):
+            #Cull low score results
+            if score > min_score:
+                confidences.append(score.detach().numpy())
+                boxes.append(box.detach().numpy())
+                class_ids.append(label)
+        
+        return (np.array(boxes), np.array(confidences), np.array(class_ids))

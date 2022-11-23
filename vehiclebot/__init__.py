@@ -3,10 +3,14 @@ import logging
 import logging.config
 import asyncio
 
-from vehiclebot.patches import asyncio_monkey_patch
+from vehiclebot.patches import (
+    asyncio_monkey_patch,
+    aiortc_monkey_patch
+)
 
 #Apply patches to methods to add more functions
 asyncio_monkey_patch()
+aiortc_monkey_patch()
 
 from decouple import config as deconf
 from aiohttp.web import Application
@@ -27,7 +31,7 @@ async def client_session_ctx(app : Application):
     '''
     _log = logging.getLogger('client_session_ctx')
     _log.debug('Creating ClientSession')
-    setattr(app, 'cli', ClientSession(app.cfg['api']['api_base']))
+    setattr(app, 'cli', ClientSession(app['cfg']['api']['api_base']))
     yield
     _log.debug('Closing ClientSession')
     await app.cli.close()
@@ -36,13 +40,16 @@ async def detection_task_ctx(app : Application):
     _log = logging.getLogger('detection_task_ctx')
     _log.debug('Creating Vehicle detection tasks')
     setattr(app, 'tm', TaskManager(app))
-    await app.tm.enumerate_tasks(app.cfg['tasks'] or {})
+    await app.tm.enumerate_tasks(app['cfg']['tasks'] or {})
     yield
     _log.debug('Closing detection tasks')
     await app.tm.close()
 
 def app_exc_hdl(loop : asyncio.AbstractEventLoop, context):
+    exception = context.get('exception')
     loop.default_exception_handler(context)
+    if exception:
+        root_logger.exception("Uncaught exception in asyncio task:", exc_info=exception)
 
 async def VehicleEntryExitOnSite(loop : asyncio.AbstractEventLoop = None, debug : bool = False):
     '''
@@ -70,7 +77,7 @@ async def VehicleEntryExitOnSite(loop : asyncio.AbstractEventLoop = None, debug 
     root_logger.info("Starting Vehicle detection program...")
     #Application to manage all tasks and a backend access
     app = Application(loop=loop)
-    setattr(app, 'cfg', cfg['app'] or {})
+    app['cfg'] = cfg['app'] or {} #Beautiful symmetry
     root_logger.debug("AIO application created")
     
     #Tasks
@@ -80,7 +87,7 @@ async def VehicleEntryExitOnSite(loop : asyncio.AbstractEventLoop = None, debug 
     root_logger.debug("AIO cleanup tasks created")
 
     #Management pages
-    if "management" in app.cfg:
+    if "management" in app['cfg']:
         init_routes(app)
         root_logger.info("Management routes added")
     

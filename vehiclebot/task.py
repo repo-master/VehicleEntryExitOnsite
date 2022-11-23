@@ -38,14 +38,19 @@ class TaskManager(object):
         self.app = app
         self.logger = logging.getLogger(__name__)
         self.tasks : Dict[str, AIOTask] = dict()
-        self.pool : Executor = ThreadPoolExecutor(max_workers=16)
+        self.pool : Executor = ThreadPoolExecutor(max_workers=4)
         self.logger.info("Started ThreadPoolExecutor with %d threads" % self.pool._max_workers)
         
+    def _handle_task_done(self, cor : asyncio.Task):
+        res = cor.result()
+        if res is not None:
+            self.logger.info("Task %s completed with result: %s", cor.get_name(), res)
+
     async def add_task(self, task_name : str, task_conf : Dict):
         '''
         Add new task from configuration dict
         '''
-        self.logger.info("Creating task \"%s\"" % task_name)
+        self.logger.info("Creating task \"%s\"..." % task_name)
         if task_name in self.tasks:
             is_loaded = self.tasks[task_name].task is not None
             self.logger.warning("Task \"%s\ already exists %s, ignoring." % (task_name, "and is loaded" if is_loaded else ''))
@@ -64,9 +69,13 @@ class TaskManager(object):
             self.logger.error("Cannot load task \"%s\". It must be of type AIOTask. Skipping" % imp_cls_name)
             return
         
-        self.tasks[task_name] = task_cls(self, task_name, **task_conf.get('properties', {}))
+        #Instantiate class with parameters
+        props = task_conf.get('properties') or {}
+        self.tasks[task_name] = task_cls(self, task_name, **props)
         await self.tasks[task_name].start_task()
         self.tasks[task_name].task = asyncio.create_task(self.tasks[task_name]())
+        self.tasks[task_name].task.add_done_callback(self._handle_task_done)
+        self.logger.info("Task \"%s\" (id: %s) created" % (task_name, self.tasks[task_name].task.get_name()))
         return self.tasks[task_name]
         
     async def shutdown_task(self, task_name : str):
