@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>a32ad587-50ad-4abb-a829-c30358392de7</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>VehicleEntryExitOnsite.py</StartupFile>
+    <StartupFile>VehicleEntryExitServer.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>

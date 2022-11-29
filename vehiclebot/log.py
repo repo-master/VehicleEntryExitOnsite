@@ -1,15 +1,28 @@
 import logging
+import asyncio
 
-LOG_GOOD_FORMAT = "[%(levelname)s] [%(name)s] %(message)s"
+LOG_GOOD_FORMAT = "[%(levelname)s] [%(name)s] (%(filename)s:%(lineno)d) %(message)s"
 
 def init_root_logger() -> logging.Logger:
     '''Initialize just enough to get some output for root logger'''
     logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
-    _stdout = logging.StreamHandler()
-    _stdout.setFormatter(logging.Formatter(LOG_GOOD_FORMAT))
-    logger.addHandler(_stdout)
+    if not logger.hasHandlers():
+        logger.setLevel(logging.DEBUG)
+        _stdout = logging.StreamHandler()
+        _stdout.setFormatter(logging.Formatter(LOG_GOOD_FORMAT))
+        logger.addHandler(_stdout)
     return logger
+
+
+def aio_exc_hdl(loop : asyncio.AbstractEventLoop, context):
+    logger = logging.getLogger(__name__)
+    exception = context.get('exception')
+    loop.default_exception_handler(context)
+    if exception:
+        if isinstance(exception, KeyboardInterrupt):
+            logger.info("KeyboardInterrupt received")
+            return
+        logger.exception("Uncaught exception in asyncio task:", exc_info=exception)
 
 class ColorfulFormatter(logging.Formatter):
     FORMAT_COLORS = {
