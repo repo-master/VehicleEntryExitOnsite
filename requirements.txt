@@ -14,3 +14,5 @@ PyYAML
 scipy
 transformers
 torch
+sentencepiece
+protobuf==3.20.1
