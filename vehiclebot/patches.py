@@ -4,6 +4,8 @@ Apply patches to various built-in modules
 
 import asyncio
 from aiortc import rtcdatachannel
+from aiohttp import web
+import numpy as np
 
 import json
 import datetime
@@ -11,8 +13,9 @@ import datetime
 class JSONifier(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, datetime.datetime):
-            print("date format", flush=True)
             return obj.isoformat()
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
         return json.JSONEncoder.default(self, obj)
     
 
@@ -38,9 +41,18 @@ def patch_aiortc_datachannel_json():
     #Reference to old send
     old_send = rtcdatachannel.RTCDataChannel.send
     def send_json(self, data, *args, **kwargs):
-        jsonified = json.dumps(data, cls=JSONifier, default=str)
+        jsonified = json.dumps(data, cls=JSONifier)
         return old_send(self, jsonified, *args, **kwargs)
     rtcdatachannel.RTCDataChannel.send = send_json
 
+def patch_aiohttp_json_response():
+    old_json_response = web.json_response
+    def json_response(*args, **kwargs):
+        return old_json_response(dumps=lambda data: json.dumps(data, cls=JSONifier), *args, **kwargs)
+    web.json_response = json_response
+    
 def aiortc_monkey_patch():
     patch_aiortc_datachannel_json()
+
+def aiohttp_monkey_patch():
+    patch_aiohttp_json_response()

@@ -4,9 +4,9 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack, R
 from aiortc.exceptions import InvalidStateError
 import logging
 import asyncio
-import pyee
+from pyee.asyncio import AsyncIOEventEmitter
 
-class DataChannelHandler(pyee.AsyncIOEventEmitter):
+class DataChannelHandler(AsyncIOEventEmitter):
     def __init__(self):
         super().__init__()
         self._channels = list()

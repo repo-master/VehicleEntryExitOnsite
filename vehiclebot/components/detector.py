@@ -1,15 +1,120 @@
 
-import datetime
-from vehiclebot.task import AIOTask
-from vehiclebot.multitask import AsyncProcess
+from ..task import AIOTask, TaskOrTasks
+from ..multitask import AsyncProcess
 
+from .camera import CameraSource, scaleImgRes
 from vehiclebot.model import YoloModelCV2
 from vehiclebot.tracker import Trajectory, TRACK_COLORS, Tracker, motrackers
 
 import os
 import cv2
+import time
 import asyncio
 import typing
+import numpy as np
+
+import datetime
+
+import mimetypes
+import aiohttp.client_exceptions
+
+Detection = typing.NamedTuple(
+    "Detection",
+    bboxes = np.ndarray,
+    detection_scores = np.ndarray,
+    class_ids = np.ndarray
+)
+
+class RemoteObjectDetector(AIOTask):
+    def __init__(self, tm, task_name,
+                 input_source : str,
+                 model : str,
+                 output : TaskOrTasks = None,
+                 process_size : int = None,
+                 img_format : str = ".png",
+                 **kwargs):
+        super().__init__(tm, task_name, **kwargs)
+        self.inp_src = input_source
+        self.output_result = output
+        self.model_name = model
+        self.img_encode_format = img_format
+        self._process_size = process_size
+        
+        self._update_rate = 10
+        self._can_detect_after = time.time()
+        self.sess = self.tm.app.cli
+        
+        self._stopEv = asyncio.Event()
+        
+    async def start_task(self):
+        pass
+            
+    async def stop_task(self):
+        self._stopEv.set()
+        await self.task
+
+    async def __call__(self):
+        try:
+            capTask : CameraSource = self.tm[self.inp_src]
+        except KeyError:
+            self.logger.error("Input source component \"%s\" is not loaded. Please check your config file to make sure it is properly configured." % self.inp_src)
+            return
+        
+        next_time = time.time()
+        delaySleep = 0
+        while not await self._stopEv.wait_for(min(delaySleep, 1/100)): #Do not exceed 100 reqs/s
+            if time.time() > self._can_detect_after:
+                #Try to grab a frame from video source
+                img = await capTask.frame()
+                if img is not None:
+                    if self._process_size is not None:
+                        img, scale = scaleImgRes(img, height=self._process_size)
+                    else:
+                        scale = 1.0
+                    det = await self.detect(img)
+                    if det:
+                        await self.tm.emit(
+                            self.output_result,
+                            "detect",
+                            detection=det,
+                            frame=img,
+                            scale=scale
+                        )
+
+            next_time += (1.0 / self._update_rate)
+            delaySleep = next_time - time.time()
+                
+    async def detect(self, img : np.ndarray) -> Detection:
+        if img is None: return
+        encode_mime = mimetypes.types_map.get(self.img_encode_format)
+        ret, img_blob = cv2.imencode(self.img_encode_format, img)
+        if not ret: return
+        #Send image to the model
+        try:
+            response = await self.sess.post(
+                "/detect",
+                data=img_blob.tobytes(),
+                params={"model": self.model_name},
+                headers={"Content-Type": encode_mime}
+            )
+            data = await response.json()
+            return Detection(
+                bboxes = np.array(data['detection']['bboxes']),
+                detection_scores = np.array(data['detection']['detection_scores']),
+                class_ids = np.array(data['detection']['class_ids'])
+            )
+        except aiohttp.client_exceptions.ClientConnectorError:
+            retry_in_sec = 20.0
+            self.logger.warning("Remote detection server (%s) is unreachable. Will retry after %.1f seconds" % (self.sess._base_url, retry_in_sec))
+            self._can_detect_after = time.time() + retry_in_sec
+        except:
+            self.logger.exception("Remote detection error")
+
+
+
+
+
+
 
 #Synchronous code in isolated process
 class VehicleDetectorProcess:

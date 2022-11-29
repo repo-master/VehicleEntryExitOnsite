@@ -6,8 +6,11 @@ from av.frame import Frame
 from av import VideoFrame
 
 import cv2
+import numpy as np
 
 import typing
+
+#TODO: Use relay to broadcast
 
 class RTCStreamTrack(AIOTask, VideoStreamTrack):
     def __init__(self, tm, task_name, resolution : typing.Dict[str, int] = None, **kwargs):
@@ -22,15 +25,20 @@ class RTCStreamTrack(AIOTask, VideoStreamTrack):
         
     async def start_task(self):
         self.tm.app['rtc'].addMediaTrack(self.name, self)
+        self.on('frame', self.imshow)
 
     async def stop_task(self):
         self.logger.info("Ending video stream")
         await self.task
         
-    async def imshow(self, window_name, img):
+    async def imshow(self, window_name : str, img : np.ndarray):
+        if img is None: return
         if self._scaleResolution is not None:
             img = cv2.resize(img, (self._scaleResolution['width'], self._scaleResolution['height']))
         self._frame = VideoFrame.from_ndarray(img, format='bgr24')
+
+
+    ## Methods for aiortc
 
     # Override from VideoStreamTrack
     async def recv(self) -> Frame:

@@ -1,4 +1,7 @@
 aiohttp
+aiohttp-jinja2
+Jinja2
+pyee
 aiortc
 aiosignal
 async-timeout

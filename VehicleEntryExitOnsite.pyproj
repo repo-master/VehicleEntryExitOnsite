@@ -25,6 +25,7 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="vehiclebot\appvision\routes.py" />
     <Compile Include="vehiclebot\components\plate.py" />
     <Compile Include="vehiclebot\components\remoteprocess\awsprocess.py" />
     <Compile Include="vehiclebot\components\camera.py" />
@@ -33,6 +34,7 @@
     <Compile Include="vehiclebot\components\processing.py" />
     <Compile Include="vehiclebot\components\rtc\rtcprocess.py" />
     <Compile Include="vehiclebot\components\rtc\rtcstream.py" />
+    <Compile Include="vehiclebot\components\tracker.py" />
     <Compile Include="vehiclebot\components\videodisplay.py" />
     <Compile Include="vehiclebot\components\__init__.py" />
     <Compile Include="vehiclebot\config.py" />
@@ -48,16 +50,22 @@
     <Compile Include="vehiclebot\multitask.py" />
     <Compile Include="vehiclebot\patches.py" />
     <Compile Include="vehiclebot\task.py" />
+    <Compile Include="vehiclebot\taskmanager.py" />
     <Compile Include="vehiclebot\tracker\bezier.py" />
     <Compile Include="vehiclebot\tracker\trajectory.py" />
     <Compile Include="vehiclebot\tracker\__init__.py" />
+    <Compile Include="vehiclebot\apponsite\__init__.py" />
     <Compile Include="vehiclebot\__init__.py" />
+    <Compile Include="VehicleEntryExitServer.py" />
     <Compile Include="VehicleEntryExitOnsite.py" />
+    <Compile Include="vehiclebot\appvision\__init__.py" />
   </ItemGroup>
   <ItemGroup>
     <InterpreterReference Include="Global|VisualStudio|Work venv (Python 3.9 (64-bit))" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="vehiclebot\apponsite\" />
+    <Folder Include="vehiclebot\appvision\" />
     <Folder Include="static\" />
     <Folder Include="static\css\" />
     <Folder Include="static\js\" />
@@ -123,6 +131,7 @@
     <Content Include="static\js\bootstrap.js.map" />
     <Content Include="static\js\bootstrap.min.js" />
     <Content Include="static\js\bootstrap.min.js.map" />
+    <Content Include="templates\modeltest.j2.html" />
     <Content Include="templates\dashboard.j2.html" />
     <Content Include="templates\base.j2.html" />
   </ItemGroup>

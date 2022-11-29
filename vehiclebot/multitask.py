@@ -6,26 +6,6 @@ import logging
 
 from concurrent.futures import ProcessPoolExecutor
 
-#TODO: Meta class that replaces all methods in derived classes with class method taking in instance id
-
-class GlobalInstances:
-    @staticmethod
-    def init():
-        global instances
-        instances = {}
-    @staticmethod
-    def create_instance(obj = None) -> str:
-        while True:
-            i_id = str(uuid.uuid1())
-            if i_id not in instances:
-                break
-        instances[i_id] = obj
-        return i_id
-    #TODO: Decorator
-    @staticmethod
-    def get_instance(instance : str):
-        return instances.get(instance)
-
 class AsyncProcessMixin:
     '''
     '''
@@ -65,10 +45,10 @@ class AsyncProcess:
         #Find instance and call the given method from that instance
         return getattr(globals()[obj], name)(*args, **kwargs)
 
-    def prepareProcess(self, **kwargs):
+    async def prepareProcess(self, **kwargs):
         self.proc : ProcessPoolExecutor = ProcessPoolExecutor(max_workers=1, **kwargs)
 
-    def endProcess(self):
+    async def endProcess(self):
         self.proc.shutdown()
 
     async def asyncCreate(self, cls : typing.Type, *args, **kwargs):
@@ -100,6 +80,9 @@ class AsyncProcess:
         def _wraps(future : asyncio.Future):
             exc = future.exception()
             if exc:
+                if isinstance(exc, KeyboardInterrupt):
+                    logger.info("KeyboardInterrupt received")
+                    return
                 logger.exception("(Async process exception)", exc_info=exc)
         return _wraps
 

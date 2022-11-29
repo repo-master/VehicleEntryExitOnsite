@@ -1,0 +1,55 @@
+{% extends "base.j2.html" %}
+{% block title %}Test detector{% endblock %}
+
+{% block head %}
+<script>
+    window.addEventListener('load', function() {
+        document.getElementById('send_img_det').addEventListener('click', function() {
+            var input = document.getElementById('img_file_det');
+            document.getElementById('output_det').innerText = "Fetching...";
+            fetch('/detect', {
+              method: 'POST',
+              body: input.files[0]
+            })
+            .then(data=>data.text())
+            .then(data=>{
+                document.getElementById('output_det').innerText = data;
+            })
+            .catch(e=>{
+                document.getElementById('output_det').innerText = e;
+            });
+        });
+
+        document.getElementById('send_img_rec').addEventListener('click', function() {
+            var input = document.getElementById('img_file_rec');
+            document.getElementById('output_rec').innerText = "Fetching...";
+            fetch('/recognize', {
+              method: 'POST',
+              body: input.files[0]
+            })
+            .then(data=>data.text())
+            .then(data=>{
+                document.getElementById('output_rec').innerText = data;
+            })
+            .catch(e=>{
+                document.getElementById('output_rec').innerText = e;
+            });
+        });
+
+    });
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Test vehicle detection</h2>
+    <label>Image: <input type="file" id="img_file_det" /></label><br />
+    <input type="button" id="send_img_det" value="Detect" />
+    <pre id="output_det"></pre>
+    <h2>Test recognition</h2>
+    <label>Image: <input type="file" id="img_file_rec" /></label><br />
+    <input type="button" id="send_img_rec" value="Recognize" />
+    <h3>Output:</h3>
+    <pre id="output_rec"></pre>
+</div>
+{% endblock content %}

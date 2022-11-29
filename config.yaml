@@ -33,9 +33,9 @@ app:
           #Hint at what type of camera is being pointed
           kind: media
           #Which camera device to use (index, path or url of stream)
-          src: 0
+          src: 0 #"media/car_park.mp4"
           skip_frames: 420
-          throttle_fps: 100
+          throttle_fps: 30
 
   api:
     api_base: http://localhost:5000/
@@ -47,32 +47,33 @@ app:
       type: CameraSource
       properties:
         <<: *primary_camera
-        #video_output: vidstream_main
 
-    vehicle_detector:
-      type: VehicleDetector
+    vehicle_tracker:
+      type: ObjectTracker
       properties:
         input_source: camera_source
-        video_output: vidstream_main
-        output_result: dump_rtc
-        detector:
-          model: "models/vehicles.zip"
-          detection_period: 1.0
+        output: vidstream_main
+        #How many frames to pass to tracker per second
+        update_rate: 30
+
+        #ROI tracker configuration
         tracker:
           # Check out the motrackers library to find out which trackers are supported
           type: SORT
-          max_lost: 8
+          max_lost: 30
           iou_threshold: 0.6
-        output:
-          image_format: .png
-
-    dump_rtc:
-      type: vehiclebot.components.rtc.rtcprocess.RTCDataProcess
+          #Steady update rate
+          update_rate: 30
+        
+    #Sends detections found in the video input to the tracker
+    vehicle_detector:
+      type: RemoteObjectDetector
       properties:
-        plate_decoder: plate_detect
-
-    plate_detect:
-      type: vehiclebot.components.plate.PlateRecogniser
+        input_source: camera_source
+        model: vehicle_yolov5
+        output: vehicle_tracker
+        process_size: 240
+        img_format: .png
 
     #RTC stream tracks
     vidstream_main:

@@ -128,8 +128,9 @@ class PlateRecogniser(AIOTask, AsyncProcess):
         
     async def start_task(self):
         try:
-            self.logger.info("Loading model for license plate...")
+            self.logger.info("Starting license plate detector...")
             self.plate_decoder = await self.asyncCreate(LicensePlateProcess)
+            self.on('recognise', self.detectAndDecode)
         except (FileNotFoundError, AttributeError, ValueError):
             self.logger.exception("Error creating License Plate detector")
             
