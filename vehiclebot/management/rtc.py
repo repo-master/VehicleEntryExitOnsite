@@ -95,7 +95,7 @@ class RTCServer(RTCPeer):
         Also, this is where we begin our peer connection
         """
 
-        self.logger.info("Got a client RTC offer from %s" % request.remote)
+        self.logger.debug("Got a client RTC offer from %s" % request.remote)
 
         #Convert given parameters to an RTCSessionDescription object to manipulate later
         params = await request.json()

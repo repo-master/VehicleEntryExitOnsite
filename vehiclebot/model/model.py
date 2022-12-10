@@ -65,10 +65,10 @@ class CV2ModelZipped(Model):
 
 class HFTransformerModel(Model):
     @classmethod
-    def fromHuggingFace(cls, model_path : str):
-        return cls(**cls._loadTransformer(model_path))
+    def fromHuggingFace(cls, model_path : str, *args, **kwargs):
+        return cls(**cls._loadTransformer(model_path, *args, **kwargs))
 
     #Depends on type of model
     @classmethod
-    def _loadTransformer(cls, model_path : str) -> dict:
+    def _loadTransformer(cls, model_path : str, **kwargs) -> dict:
         raise NotImplementedError()

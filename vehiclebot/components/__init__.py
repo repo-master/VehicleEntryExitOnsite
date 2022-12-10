@@ -1,6 +1,6 @@
 
 from .camera import CameraSource
-from .detector import RemoteObjectDetector, VehicleDetector
+from .detector import RemoteObjectDetector
 from .videodisplay import VideoDisplay
 from .rtc.rtcstream import RTCStreamTrack
 from .filter import BlurDetector

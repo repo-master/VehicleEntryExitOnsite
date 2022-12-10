@@ -41,7 +41,7 @@ class TaskManager(object):
         
         imp_mod, imp_cls_name = module_path_decode(task_conf['type'], default_package='.'.join((__package__, 'components')))
         try:
-            self.logger.debug("Importing module \"%s\"" % imp_mod)
+            self.logger.debug("Importing module '%s' for '%s'" % (imp_mod, task_name))
             task_module = importlib.import_module(imp_mod)
             task_cls = getattr(task_module, imp_cls_name)
         except (ImportError, AttributeError):

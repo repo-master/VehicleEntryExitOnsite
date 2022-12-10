@@ -14,7 +14,7 @@ class Detection(dict):
     def __call__(self, updated_detection : dict, callback : typing.Callable = None):
         ret_events = []
         if 'is_moving' in updated_detection:
-            if not self['is_moving'] and updated_detection['is_moving']:
+            if not self['is_moving'] and updated_detection['is_moving'] and updated_detection['estimated_movement_direction'] is not 'Stopped':
                 #Started moving
                 ret_msg = {
                     "title": "Vehicle update",
@@ -58,6 +58,7 @@ class RTCDataProcess(DetectionHandler):
         self._new_client_messages = []
         
     async def start_task(self):
+        await super().start_task()
         self.tm.app['rtc'].addInDataChannelHandler(**self.handlers)
         self.handlers['log'].on('data', self._handleMessageLog)
         self.handlers['log'].on('connect', self._handleLogSendAll)
@@ -68,26 +69,27 @@ class RTCDataProcess(DetectionHandler):
             if is_stop: break
             if next_items is None: continue
             
-            for det in next_items:
-                if det['is_new_detection']:
-                    new_det = Detection(det)
-                    self._submitPlateDecodeTask(new_det)
+            for batch in next_items:
+                for det in batch:
+                    if det['is_new_detection']:
+                        new_det = Detection(det)
+                        self._submitPlateDecodeTask(new_det)
 
-                    self._all_detections[det['track_id']] = new_det
-                    msg = {
-                        "title": "Vehicle detected",
-                        "message": "New vehicle detected, recognising plate...",
-                        "ts": new_det['first_detect_ts']
-                    }
-                    self.handlers['log'].broadcast(msg)
-                    self._new_client_messages.append(msg)
-                else:
-                    dtect : Detection = self._all_detections.get(det['track_id'])
-                    if dtect is not None:
-                        event = dtect(det) #Update with new detection frame
-                        if event:
-                            self.handlers['log'].broadcast(event)
-                            self._new_client_messages.extend(event)
+                        self._all_detections[det['track_id']] = new_det
+                        msg = {
+                            "title": "Vehicle detected",
+                            "message": "New vehicle detected, recognising plate...",
+                            "ts": new_det['first_detect_ts']
+                        }
+                        self.handlers['log'].broadcast(msg)
+                        self._new_client_messages.append(msg)
+                    else:
+                        dtect : Detection = self._all_detections.get(det['track_id'])
+                        if dtect is not None:
+                            event = dtect(det) #Update with new detection frame
+                            if event:
+                                self.handlers['log'].broadcast(event)
+                                self._new_client_messages.extend(event)
             
             #Task progress check (periodically checked)
             for det in self._all_detections.values():
@@ -111,10 +113,14 @@ class RTCDataProcess(DetectionHandler):
                 plate_detection = rec_task.result()
                 #Bad detection, maybe try again
                 if plate_detection is None:
-                    self._submitPlateDecodeTask(det)
+                    #TODO: Bit delay in frames before retrying
+                    #self._submitPlateDecodeTask(det)
                     return
 
-                print("Detection plate:", plate_detection, flush=True)
+                if plate_detection.get('code') < 0:
+                    #self.logger.debug("Plate number was not determined: %s", plate_detection.get('message'))
+                    return
+                
                 event = det({"plate": plate_detection})
                 if event:
                     self.handlers['log'].broadcast(event)
@@ -128,11 +134,11 @@ class RTCDataProcess(DetectionHandler):
         channel.send(self._new_client_messages)
 
     async def _updateVehicleData(self):
-        self.handlers['status'].broadcast([
+        self.handlers['status'].broadcast(sorted([
             {
                 "track_id": det['track_id'],
-                "plate_number": det['plate']['plate_number'] if 'plate' in det else 'Detecting...',
+                "plate_number": (det['plate']['plate_str'] or 'Unknown') if 'plate' in det else 'Detecting...',
                 "detect_time": det.get('first_detect_ts')
             }
             for det in self._all_detections.values()
-        ])
+        ], key=lambda o: o['detect_time'], reverse=True))

@@ -33,7 +33,7 @@ app:
           #Hint at what type of camera is being pointed
           kind: media
           #Which camera device to use (index, path or url of stream)
-          src: 0 #"media/car_park.mp4"
+          src: "media/IMG_4081.MOV" #"media/car_park.mp4"
           skip_frames: 420
           throttle_fps: 30
 
@@ -53,6 +53,8 @@ app:
       properties:
         input_source: camera_source
         output: vidstream_main
+        detection_output: vehicle_manager
+
         #How many frames to pass to tracker per second
         update_rate: 30
 
@@ -60,8 +62,8 @@ app:
         tracker:
           # Check out the motrackers library to find out which trackers are supported
           type: SORT
-          max_lost: 30
-          iou_threshold: 0.6
+          max_lost: 20
+          iou_threshold: 0.55
           #Steady update rate
           update_rate: 30
         
@@ -74,6 +76,14 @@ app:
         output: vehicle_tracker
         process_size: 240
         img_format: .png
+
+    license_plate_decoder:
+      type: vehiclebot.components.plate.PlateRecognizer
+
+    vehicle_manager:
+      type: vehiclebot.components.rtc.rtcprocess.RTCDataProcess
+      properties:
+        plate_decoder: license_plate_decoder
 
     #RTC stream tracks
     vidstream_main:

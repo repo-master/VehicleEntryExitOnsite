@@ -8,15 +8,25 @@ import os
 ##TODO
 ######
 #
-# [x] Bring back trajectory, but now using instance of Track than separate dict
-# [ ] Also bring back DataChannel to show on dashboard
-# [x] If 'lost' > 0, then update featuretracker bbox into motracker bbox till not lost
-# [ ] Feature tracker should be moved smoothly
-# [x] Show ghost rectangle of featuretracker bbox
-# [ ] More models in server: Plate detect, OCR (combine both), facing side (front/back/none)
+# [ ] More models in server: [x] Plate detect, [x] OCR (combine both), [ ] facing side (front/back/none)
 # [ ] Make the remote detector use another class as delegate, so that RemoteDetector is
 #     actually able to use any class to get detection (local or not). It becomes "ObjectDetector"
 #     and "PlateRecogniser" and they use other class objects such as "RemoteDetector" and "LocalDetector"
+#[ ] Sort vehicle detections in dashboard most recent on top
+
+
+'''
+PLANNED
+------------
+- SQLite Database locally to store:
+  - All tracks, with sequence number to keep track id
+  - Use peewee
+- Temporary track ID before using the database sequence after successful track (age more than 10)
+- Associate all tracks with known license plate from a table, with likelyhood estimate of each
+- Track IDs must be unique even between runs of the app, so use UUID (use monkey patch on the tracker)
+
+'''
+
 
 '''
 Run app without gunicorn

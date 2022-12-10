@@ -51,7 +51,8 @@ async def VehicleEntryExitOnSite(loop : asyncio.AbstractEventLoop = None, debug 
         loop = asyncio.get_event_loop()
 
     loop.set_debug(debug)
-    root_logger.info("Debug mode is %s" % 'on' if debug else 'off')
+    if debug:
+        root_logger.info("Debug mode is on")
 
     loop.set_exception_handler(aio_exc_hdl)
 

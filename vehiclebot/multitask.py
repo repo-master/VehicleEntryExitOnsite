@@ -1,6 +1,7 @@
 
 import uuid
 import typing
+import signal
 import asyncio
 import logging
 
@@ -26,7 +27,7 @@ class AsyncProcessMixin:
         def _wraps(future : asyncio.Future):
             exc = future.exception()
             if exc:
-                logger.exception("(Async process exception)", exc_info=exc)
+                logger.exception("(Async executor exception)", exc_info=exc)
         return _wraps
 
     
@@ -41,12 +42,15 @@ class AsyncProcess:
         all_items[i_id] = cls(*args, **kwargs)
         return i_id
 
+    def init_worker():
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
     def _processCall(obj : str, name : str, *args, **kwargs):
         #Find instance and call the given method from that instance
         return getattr(globals()[obj], name)(*args, **kwargs)
 
     async def prepareProcess(self, **kwargs):
-        self.proc : ProcessPoolExecutor = ProcessPoolExecutor(max_workers=1, **kwargs)
+        self.proc : ProcessPoolExecutor = ProcessPoolExecutor(max_workers=1, initializer=AsyncProcess.init_worker, **kwargs)
 
     async def endProcess(self):
         self.proc.shutdown()
@@ -83,6 +87,6 @@ class AsyncProcess:
                 if isinstance(exc, KeyboardInterrupt):
                     logger.info("KeyboardInterrupt received")
                     return
-                logger.exception("(Async process exception)", exc_info=exc)
+                logger.exception("(Async executor exception)", exc_info=exc)
         return _wraps
 

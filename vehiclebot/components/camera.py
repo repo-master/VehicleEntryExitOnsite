@@ -1,6 +1,7 @@
 
 from vehiclebot.task import AIOTask, TaskOrTasks
 from vehiclebot.multitask import AsyncProcess
+from vehiclebot.imutils import scaleImgRes
 
 import time
 import asyncio
@@ -9,19 +10,6 @@ import typing
 
 import cv2
 import numpy as np
-
-def scaleImgRes(img : np.ndarray, scale : float = None, width : float = None, height : float = None):
-    old_h, old_w = img.shape[:2]
-
-    if height is not None:
-        scale = height/old_h
-    elif width is not None:
-        scale = width/old_w
-    if scale is None:
-        scale = 1.0
-    new_w = int(old_w * scale)
-    new_h = int(old_h * scale)
-    return cv2.resize(img, (new_w, new_h)), scale
 
 #Synchronous code in isolated process
 #This is needed because OpenCV function calls are not async
@@ -46,9 +34,6 @@ class CameraSourceProcess(threading.Thread):
         self.close()
 
     def run(self):
-        if self._update_rate is None:
-            self._update_rate = 60
-
         next_time = time.time()
         delaySleep = 0
         while not self._stopEv.wait(timeout=delaySleep):

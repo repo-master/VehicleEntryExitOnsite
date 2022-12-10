@@ -6,6 +6,7 @@ import typing
 
 import cv2
 from transformers import AutoFeatureExtractor, AutoModelForObjectDetection
+import torch
 
 class YOLOModel(Model):
     _NEED_UNSCALE = False
@@ -85,7 +86,7 @@ class YOLOModel(Model):
     def _phase_zip(self, detections : tuple) -> list:
         return list(zip(*detections))
 
-class YoloModelCV2(CV2ModelZipped, YOLOModel):
+class YOLOModelCV2(CV2ModelZipped, YOLOModel):
     _NEED_UNSCALE = True
     def _phase_preprocess(self, img : np.ndarray):
         frame_size = self._meta['net_input_size']
@@ -115,18 +116,30 @@ class YoloModelCV2(CV2ModelZipped, YOLOModel):
         self._net.setInput(inp)
         return self._net.forward(self._net.getUnconnectedOutLayersNames())
     
+class YOLOModelTorch(YOLOModel):
+    pass
+
 class YOLOModelTransformers(HFTransformerModel, YOLOModel):
     '''
     Model to detect objects using the HuggingFace Transformers API
     '''
     @classmethod
-    def _loadTransformer(cls, model_path : str) -> dict:
-        net = {
-            'exractor': AutoFeatureExtractor.from_pretrained(model_path),
-            'detector': AutoModelForObjectDetection.from_pretrained(model_path)
-        }
-        labels = ["license-plates"]
+    def _loadTransformer(cls, model_path : str, device : str = None, cache_dir = None) -> dict:
+        labels = []
         meta = {}
+        
+        if device is None:
+            #Can use NVIDIA GPU if available
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            device = torch.device(device)
+            
+        meta['device'] = device
+        
+        net = {
+            'exractor': AutoFeatureExtractor.from_pretrained(model_path, cache_dir=cache_dir),
+            'detector': AutoModelForObjectDetection.from_pretrained(model_path, cache_dir=cache_dir).to(device)
+        }
         
         return {
             "net" : net,
@@ -134,11 +147,13 @@ class YOLOModelTransformers(HFTransformerModel, YOLOModel):
             "metadata" : meta
         }
 
-    def _phase_preprocess(self, img : np.ndarray):
-        return self._net['exractor'](images=img, return_tensors="pt")
+    def _phase_preprocess(self, img : np.ndarray) -> dict:
+        device = self._meta['device']
+        feature_tensors = self._net['exractor'](images=[img], return_tensors="pt").pixel_values
+        return feature_tensors.to(device)
         
-    def _phase_forward(self, inp : dict):
-        return self._net['detector'](**inp)
+    def _phase_forward(self, inp):
+        return self._net['detector'](pixel_values = inp)
         
     def _phase_unwrap(self,
                       img_orig : np.ndarray,
@@ -150,14 +165,20 @@ class YOLOModelTransformers(HFTransformerModel, YOLOModel):
         confidences = []
         boxes = []
         
-        results = self._net['exractor'].post_process_object_detection(detections, threshold=min_confidence, target_sizes=[img_orig.shape[:2]])
+        device = self._meta['device']
+        img_sizes = torch.Tensor([img_orig.shape[:2]]).to(device)
+        results = self._net['exractor'].post_process_object_detection(detections, threshold=min_confidence, target_sizes=img_sizes)
         #0th because one image, but loop in all detections
         result = results[0]
         for score, label, box in zip(result["scores"], result["labels"], result["boxes"]):
             #Cull low score results
             if score > min_score:
-                confidences.append(score.detach().numpy())
-                boxes.append(box.detach().numpy())
-                class_ids.append(label)
+                confidences.append(score.detach().cpu().numpy())
+                boxes.append(box.detach().cpu().numpy())
+                class_ids.append(label.detach().cpu().numpy())
         
-        return (np.array(boxes), np.array(confidences), np.array(class_ids))
+        return (
+            np.array(boxes),
+            np.array(confidences),
+            np.array(class_ids)
+        )

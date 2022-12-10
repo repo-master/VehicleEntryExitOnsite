@@ -20,6 +20,9 @@ class DetectionHandler(AIOTask):
         super().__init__(tm, task_name, **kwargs)
         self.save_queue = asyncio.Queue(maxsize=max_queue)
         self._stop = asyncio.Event()
+        
+    async def start_task(self):
+        self.on("detection", self.processDetection)
 
     async def stop_task(self):
         self._stop.set()

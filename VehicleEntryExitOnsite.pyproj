@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>a32ad587-50ad-4abb-a829-c30358392de7</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>VehicleEntryExitServer.py</StartupFile>
+    <StartupFile>VehicleEntryExitOnsite.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -25,6 +25,10 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="test_boxes.py" />
+    <Compile Include="vehiclebot\appvision\recog1.py" />
+    <Compile Include="vehiclebot\appvision\recog3.py" />
+    <Compile Include="vehiclebot\appvision\recog2.py" />
     <Compile Include="vehiclebot\appvision\routes.py" />
     <Compile Include="vehiclebot\components\plate.py" />
     <Compile Include="vehiclebot\components\remoteprocess\awsprocess.py" />
@@ -38,10 +42,12 @@
     <Compile Include="vehiclebot\components\videodisplay.py" />
     <Compile Include="vehiclebot\components\__init__.py" />
     <Compile Include="vehiclebot\config.py" />
+    <Compile Include="vehiclebot\imutils.py" />
     <Compile Include="vehiclebot\log.py" />
     <Compile Include="vehiclebot\management\rtc.py" />
     <Compile Include="vehiclebot\management\__init__.py" />
     <Compile Include="vehiclebot\model\augmented_filter.py" />
+    <Compile Include="vehiclebot\model\craft.py" />
     <Compile Include="vehiclebot\model\filter.py" />
     <Compile Include="vehiclebot\model\model.py" />
     <Compile Include="vehiclebot\model\ocr.py" />
@@ -55,6 +61,7 @@
     <Compile Include="vehiclebot\tracker\trajectory.py" />
     <Compile Include="vehiclebot\tracker\__init__.py" />
     <Compile Include="vehiclebot\apponsite\__init__.py" />
+    <Compile Include="vehiclebot\types.py" />
     <Compile Include="vehiclebot\__init__.py" />
     <Compile Include="VehicleEntryExitServer.py" />
     <Compile Include="VehicleEntryExitOnsite.py" />
@@ -64,6 +71,7 @@
     <InterpreterReference Include="Global|VisualStudio|Work venv (Python 3.9 (64-bit))" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="scripts\" />
     <Folder Include="vehiclebot\apponsite\" />
     <Folder Include="vehiclebot\appvision\" />
     <Folder Include="static\" />
@@ -84,8 +92,10 @@
     <Content Include=".gitignore" />
     <Content Include="config.yaml" />
     <Content Include="Dockerfile" />
+    <Content Include="old_detector.py.bak" />
     <Content Include="README.md" />
     <Content Include="requirements.txt" />
+    <Content Include="scripts\windows-install.bat" />
     <Content Include="static\css\bootstrap-grid.css" />
     <Content Include="static\css\bootstrap-grid.css.map" />
     <Content Include="static\css\bootstrap-grid.min.css" />
