@@ -103,6 +103,8 @@ function start(pc) {
             //console.log(row)
             //const entry_ts = dayjs(row.entry_state_ts);
             //const exit_ts = dayjs(row.exit_state_ts);
+            const duration = row.presence_duration || '-';
+
             content += "<tr>";
             content += "<td>";
             content += row.plate_number;
@@ -117,7 +119,7 @@ function start(pc) {
             content += row.exit_state_ts;
             content += "</td>";
             content += "<td>";
-            content += "-";
+            content += duration;
             content += "</td>";
             content += "</tr>";
         }

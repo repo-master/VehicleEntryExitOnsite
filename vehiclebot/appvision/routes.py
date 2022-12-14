@@ -83,7 +83,7 @@ async def detect(req : web.Request) -> web.Response:
     '''Detect anything'''
     
     res = await asyncio.get_running_loop().run_in_executor(
-        req.app['pool'],
+        None,
         detect_task,
         await req.content.read(),
         req.query.get('model', 'vehicle_yolov5')

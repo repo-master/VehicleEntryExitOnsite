@@ -137,7 +137,7 @@ class TrackerProcess(threading.Thread):
 
     def cleanup(self):
         print("Saving recording...", flush=True)
-        #pickle.dump(self._aa, open("unneeded/test7.pkl", "wb"))
+        #pickle.dump(self._aa, open("unneeded/test8.pkl", "wb"))
 
     def run(self):
         if self._update_rate is None:
@@ -225,9 +225,11 @@ class TrackerProcess(threading.Thread):
             
             img_crop = cropImage(frame, xmin, ymin, xmin+width, ymin+height)
 
+            if img_crop.shape[0]*img_crop.shape[1] == 0: continue
+
             #TODO: Class Object
             res_item = {
-                'track_id': trk_id,
+                'track_id': 1,#trk_id,
                 'age': trk_obj.age,
                 'lost_for_frames': trk_obj.lost,
                 'img': img_crop,
@@ -360,7 +362,7 @@ class ObjectTracker(AIOTask, AsyncProcess):
             
     async def stop_task(self):
         self._stopEv.set()
-        await self.wait_task_timeout(3.0)
+        await self.wait_task_timeout(timeout=3.0)
 
     async def __call__(self):
         try:

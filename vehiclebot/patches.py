@@ -7,6 +7,7 @@ from aiortc import rtcdatachannel
 from aiohttp import web
 import numpy as np
 import typing
+import humanize
 
 import json
 import datetime
@@ -16,6 +17,8 @@ class JSONifier(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, datetime.datetime):
             return obj.isoformat()
+        if isinstance(obj, datetime.timedelta):
+            return humanize.precisedelta(obj)
         if isinstance(obj, np.ndarray):
             return obj.tolist()
         if isinstance(obj, Iterable):

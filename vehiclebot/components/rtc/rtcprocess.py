@@ -100,6 +100,8 @@ class RTCDataProcess(DetectionHandler):
         if pos is None: pos = det['centroid_pos']
         x, y = pos
 
+        #print(pos, det_gate)
+
         for k, v in det_gate.items():
             box_data[k] = {'intersecting': False, 'state_change_ts': None}
             if v[0]<x<v[0]+v[2] and v[1]<y<v[1]+v[3]:
@@ -108,8 +110,8 @@ class RTCDataProcess(DetectionHandler):
 
     def _updateEntryExitState(self, det : Detection):
         gates = {
-            'e2': np.array((1434, 113, 157, 959)),
-            'e1': np.array((1600, 235, 199, 845))
+            'e1': np.array((0, 890, 1080, 96)),
+            'e2': np.array((0, 990, 1080, 96))
         }
         if '_timings' not in det:
             det.update({'_timings': {x:{'_need_update': True} for x in gates.keys()}, "entry_exit_state": "-"})
@@ -151,38 +153,47 @@ class RTCDataProcess(DetectionHandler):
                     elif new_state == 'Exit':
                         det.update({'exit_ts': ts})
                     print("Detection", det['track_id'], 'state changed to', new_state)
+                    det['_timings']['e1']['_need_update'] = True
+                    det['_timings']['e2']['_need_update'] = True
 
     async def __call__(self):
         while not self._stop.is_set():
             is_stop, next_items = await asyncio.gather(self._stop.wait_for(timeout=.1), self.save_queue.get_wait_for(timeout=.3))
             if is_stop: break
             if next_items is None: continue
+            #print("Items batch", next_items)
             
             for batch in next_items:
                 for det in batch:
                     if det['is_new_detection']:
-                        new_det = Detection(det)
+                        if len(self._all_detections) == 0:
+                            new_det = Detection(det)
+                            self._all_detections[det['track_id']] = new_det
+                        else:
+                            new_det = self._all_detections.pop(list(self._all_detections.keys())[0])
+                            self._all_detections[det['track_id']] = new_det
+                            new_det(det)
+
                         new_det.update({
                             "vehicle_type": TMP_CLASSID_TO_TYPE.get(new_det['detection_class'][0], "Vehicle")
                         })
 
-                        new_ephimeral_plate_id = uuid.uuid4().hex
-                        self.plates.update({
-                            new_ephimeral_plate_id: {
-                                'plate_number': '-',
-                                'is_updated': True,
-                                'is_active': True,
-                                'last_state_ts': datetime.datetime.now(),
-                                'associated_det': new_det
-                            }
-                        })
-                        new_det.update({
-                            "_ephemeral_plate": new_ephimeral_plate_id
-                        })
+                        if len(self.plates) == 0:
+                            new_ephimeral_plate_id = str(det['track_id'])
+                            self.plates.update({
+                                new_ephimeral_plate_id: {
+                                    'plate_number': '...',
+                                    'is_updated': True,
+                                    'is_active': True,
+                                    'last_state_ts': datetime.datetime.now(),
+                                    'associated_det': new_det
+                                }
+                            })
+                            new_det.update({
+                                "_ephemeral_plate": new_ephimeral_plate_id
+                            })
 
                         self._submitPlateDecodeTask(new_det)
-
-                        self._all_detections[det['track_id']] = new_det
 
                         msg = {
                             "title": "Vehicle detected",
@@ -212,13 +223,13 @@ class RTCDataProcess(DetectionHandler):
             #Not efficient but for now its okay. Later needs to use delta and send on update
             await self._updateVehicleData()
             
-    def _submitPlateDecodeTask(self, det : Detection):
+    def _submitPlateDecodeTask(self, det : Detection, delay : float = 0.0):
         if self.plate_decoder is None: return
         self.plates[det['_ephemeral_plate']].update({
-            'plate_number': "Detecting... [ID %d]" % det['track_id']
+            'message': "Detecting... [ID %d]" % det['track_id']
         })
         setattr(det, '_rec_task', asyncio.create_task(
-            self.tm[self.plate_decoder].detectAndDecode(dict(det))
+            self.tm[self.plate_decoder].detectAndDecode(dict(det), time() + delay)
         ))
 
     def _checkPlateTask(self, det : Detection):
@@ -226,34 +237,40 @@ class RTCDataProcess(DetectionHandler):
         if rec_task is not None:
             if rec_task.done():
                 plate_detection = rec_task.result()
-                print("Plate result:", plate_detection)
                 #Bad detection, maybe try again
                 if plate_detection is None:
                     #TODO: Bit delay in frames before retrying
-                    #self._submitPlateDecodeTask(det)
                     delattr(det, '_rec_task')
+                    self._submitPlateDecodeTask(det, 2)
                     return
 
-                if plate_detection.get('code') < 0:
-                    self.plates[det['_ephemeral_plate']].update({'plate_number': "Error %d" % plate_detection.get('code')})
+                if plate_detection.get('code') != 0:
+                    self.plates[det['_ephemeral_plate']].update({'message': "Error %d" % plate_detection.get('code')})
                     #self.logger.debug("Plate number was not determined: %s", plate_detection.get('message'))
                     delattr(det, '_rec_task')
+                    self._submitPlateDecodeTask(det, 1)
                     return
+                else:
+                    #Update again later in case changes are found
+                    self._submitPlateDecodeTask(det, 3)
                 
                 event = det({"plate": plate_detection})
 
                 #Check if this plate already exists
                 plate_str = plate_detection['plate_str']
-                if plate_str in self.plates:
+
+                s = [x for x, y in self.plates.items() if y['plate_number'] == plate_str]
+
+                if len(s) > 0:
                     #This plate was previously recognized and detected by a different detector.
                     #Make this detection also associated with it
-                    del self.plates[det['_ephemeral_plate']]
-                    self.plates[plate_str]['associated_det'] = det
+                    #del self.plates[det['_ephemeral_plate']]
+                    self.plates[s[0]]['associated_det'] = det
                 else:
                     #New plate detection (maybe)
-                    self.plates[plate_str] = self.plates.pop(det['_ephemeral_plate'])
-                    det['_ephemeral_plate'] = plate_str
-                    self.plates[plate_str].update({
+                    #self.plates[plate_str] = self.plates.pop(det['_ephemeral_plate'])
+                    #det['_ephemeral_plate'] = plate_str
+                    self.plates[det['_ephemeral_plate']].update({
                         "plate_number": plate_str
                     })
 
@@ -268,20 +285,28 @@ class RTCDataProcess(DetectionHandler):
     #async def _handleLogSendAll(self, channel):
     #    channel.send(self._new_client_messages)
 
+    def calculate_duration(self, det : Detection):
+        entry_ts = det.get("entry_ts")
+        exit_ts = det.get("exit_ts")
+        if entry_ts is not None and exit_ts is not None:
+            return exit_ts - entry_ts
+
     async def _updateVehicleData(self):
         if time() - self._last_broadcast < 1.0:
             return
         vehicle_data = sorted([
             {
+                "id": x,
                 "plate_number": y.get('plate_number') or 'Unknown',
                 "type": y.get('associated_det', {}).get('vehicle_type', 'Unknown type'),
                 "entry_exit_state": y.get('associated_det', {}).get('entry_exit_state', 'N/A'),
                 "entry_state_ts": y.get('associated_det', {}).get("entry_ts", '-'),
                 "exit_state_ts": y.get('associated_det', {}).get("exit_ts", '-'),
+                "presence_duration": self.calculate_duration(y.get('associated_det', {})),
                 "last_state_timestamp": y.get("last_state_ts"),
                 "is_active": y.get("is_active", False)
             }
-            for y in self.plates.values()
+            for x,y in self.plates.items()
         ], key=lambda o: o['last_state_timestamp'], reverse=True)
 
         self.handlers['status'].broadcast(list(filter(lambda o: o['is_active'], vehicle_data)))

@@ -3,8 +3,12 @@ from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack, RTCDataChannel
 from aiortc.exceptions import InvalidStateError
 import logging
-import asyncio
 from pyee.asyncio import AsyncIOEventEmitter
+
+from ..task import AIOTask
+
+import tqdm.asyncio
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 class DataChannelHandler(AsyncIOEventEmitter):
     def __init__(self):
@@ -137,5 +141,9 @@ class RTCServer(RTCPeer):
 
     async def __on_app_shutdown_handler(self, app):
         self.logger.info("Waiting for peer connections to close...")
-        await asyncio.gather(*[pc.close() for pc in self.__pc_list])
+        pc_close_tasks = [AIOTask.wait_task_timeout_autocancel(pc.close(), timeout=1.0) for pc in self.__pc_list]
+        with logging_redirect_tqdm():
+            for f in tqdm.asyncio.tqdm.as_completed(pc_close_tasks):
+                await f
+        self.logger.debug("All peer connections closed")
         self.__pc_list.clear()

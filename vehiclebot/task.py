@@ -28,8 +28,14 @@ class AIOTask(AsyncIOEventEmitter):
         '''
         pass
     
-    async def wait_task_timeout(self, timeout : float = 5.0):
+    async def wait_task_timeout(self, task = None, timeout : float = 5.0):
+        if task is None: task = self.task
+        return self.wait_task_timeout_autocancel(task, timeout, self.logger)
+
+    @staticmethod
+    async def wait_task_timeout_autocancel(task : asyncio.Task, timeout : float = 5.0, logger : logging.Logger = None):
         try:
-            return await asyncio.wait_for(self.task, timeout)
+            return await asyncio.wait_for(task, timeout)
         except asyncio.TimeoutError:
-            self.logger.warning("Task was forcibly closed after %.1f seconds timeout" % timeout)
+            if logger is not None:
+                logger.warning("Task was forcibly closed after %.1f seconds timeout" % timeout)

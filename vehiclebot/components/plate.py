@@ -41,7 +41,8 @@ class PlateRecognizer(AIOTask):
     async def stop_task(self):
         await self.wait_task_timeout()
         
-    async def detectAndDecode(self, detection : dict) -> PlateDetection:
+    async def detectAndDecode(self, detection : dict, when : float = None) -> PlateDetection:
+        if when is None: when = time.time()
         #TODO: Choose which images to send by measuring likelyhood of getting detection
         img = detection.get('img')
         if img is None: return
@@ -54,6 +55,10 @@ class PlateRecognizer(AIOTask):
             if sleepDelta > 0:
                 self.logger.info("Waiting for %.2f seconds to try sending request...", sleepDelta)
                 await asyncio.sleep(sleepDelta)
+
+            wait_delay = max(0, when - time.time())
+            if wait_delay > 0:
+                await asyncio.sleep(wait_delay)
 
             response = await self.sess.post(
                 self._plate_endpoint,
