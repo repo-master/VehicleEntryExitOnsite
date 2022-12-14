@@ -42,7 +42,9 @@ async def VehicleVision(loop : asyncio.AbstractEventLoop = None, debug : bool = 
 
     #Set-up the logger from config
     root_logger.info("Setting up the logger...")
-    logging.config.dictConfig(cfg['logger'])
+    _log_cfg = cfg.get('logger')
+    if _log_cfg is not None:
+        logging.config.dictConfig(_log_cfg)
 
     if debug:
         root_logger.setLevel(logging.DEBUG)
@@ -50,7 +52,7 @@ async def VehicleVision(loop : asyncio.AbstractEventLoop = None, debug : bool = 
     root_logger.info("Starting Vehicle vision server...")
     #Application to manage all tasks and a backend access
     app = Application(loop=loop)
-    app['cfg'] = cfg['app'] or {} #Beautiful symmetry
+    app['cfg'] = cfg.get('app', {})
     root_logger.debug("AIO application created")
     
     #API routes

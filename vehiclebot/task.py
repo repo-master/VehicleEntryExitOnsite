@@ -27,3 +27,9 @@ class AIOTask(AsyncIOEventEmitter):
         passes control back to asyncio (eg. using sleep, aio socket, etc.)
         '''
         pass
+    
+    async def wait_task_timeout(self, timeout : float = 5.0):
+        try:
+            return await asyncio.wait_for(self.task, timeout)
+        except asyncio.TimeoutError:
+            self.logger.warning("Task was forcibly closed after %.1f seconds timeout" % timeout)

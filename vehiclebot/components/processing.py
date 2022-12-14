@@ -26,7 +26,7 @@ class DetectionHandler(AIOTask):
 
     async def stop_task(self):
         self._stop.set()
-        await self.task
+        await self.wait_task_timeout(5.0)
 
     async def __call__(self):
         while not self._stop.is_set():

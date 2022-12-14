@@ -28,7 +28,9 @@ class RTCStreamTrack(AIOTask, VideoStreamTrack):
         self.on('frame', self.imshow)
 
     async def stop_task(self):
-        self.logger.info("Ending video stream")
+        self.logger.debug("Ending video stream...")
+        VideoStreamTrack.stop(self)
+        self.logger.info("Video Stream ended")
         await self.task
         
     async def imshow(self, window_name : str, img : np.ndarray):

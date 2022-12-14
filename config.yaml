@@ -33,12 +33,12 @@ app:
           #Hint at what type of camera is being pointed
           kind: media
           #Which camera device to use (index, path or url of stream)
-          src: "media/IMG_4081.MOV" #"media/car_park.mp4"
-          skip_frames: 420
-          throttle_fps: 30
+          src: "media/21194152-preview.mp4" #"media/car_park.mp4"
+          skip_frames: 0
+          throttle_fps: 16
 
   api:
-    api_base: http://localhost:5000/
+    api_base: http://192.168.0.9:5000/
     ws_base: ws://localhost:5000/
 
   #Task configuration
@@ -62,23 +62,27 @@ app:
         tracker:
           # Check out the motrackers library to find out which trackers are supported
           type: SORT
-          max_lost: 20
+          #Number of detection frames till lost
+          max_lost: 10
           iou_threshold: 0.55
           #Steady update rate
-          update_rate: 30
+          update_rate: 60
         
     #Sends detections found in the video input to the tracker
     vehicle_detector:
-      type: RemoteObjectDetector
-      properties:
-        input_source: camera_source
-        model: vehicle_yolov5
-        output: vehicle_tracker
-        process_size: 240
-        img_format: .png
+     type: RemoteObjectDetector
+     properties:
+       input_source: camera_source
+       model: vehicle_yolov5
+       output: vehicle_tracker
+       process_size: 240
+       img_format: .png
+       server_endpoint: !env MODEL_SERVER
 
     license_plate_decoder:
       type: vehiclebot.components.plate.PlateRecognizer
+      properties:
+        server_endpoint: !env MODEL_SERVER
 
     vehicle_manager:
       type: vehiclebot.components.rtc.rtcprocess.RTCDataProcess
@@ -91,6 +95,10 @@ app:
 
   #Management web server
   management:
+    
+  admin:
+    
+  #integrated_model_server:
     
 
 #Logging configuration

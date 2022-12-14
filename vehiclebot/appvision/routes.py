@@ -19,6 +19,7 @@ from . import recog3 as recognition
 from ..model.yolodnn import (YOLOModelCV2, YOLOModelTransformers)
 from ..model.ocr import OCRModelTransformers
 from ..model.craft import CRAFTModel
+from ..log import init_root_logger
 
 VEHICLE_DETECT_MODEL_FILE = "models/vehicles.zip"
 PLATE_DETECT_MODEL_FILE = "nickmuchi/yolos-small-finetuned-license-plate-detection"
@@ -32,7 +33,7 @@ MODEL_LOADERS = {
     'text_detect_pt_craft': (CRAFTModel.fromCRAFT, (TEXT_DETECT_MODEL_FILE,), {})
 }
 
-PRELOAD_MODELS = list(MODEL_LOADERS.keys())
+PRELOAD_MODELS = ['vehicle_yolov5']
 
 #Data load helpers
 
@@ -45,6 +46,15 @@ def get_model(model_name):
         model = mdl_loader[0](*mdl_loader[1], **mdl_loader[2])
         globals().update({model_name: model})
     return globals().get(model_name)
+
+def models_preload(model_list : list):
+    log = init_root_logger(logging.getLogger(__name__))
+    log.info("Preloading models [%s]...", ','.join(model_list))
+    try:
+        n_models = list(map(get_model, model_list))
+    except:
+        log.exception("Error preloading")
+    log.info("%d Models preloaded", len(n_models))
 
 #Tasks for workers
 
@@ -107,6 +117,7 @@ async def tester(request: web.Request) -> typing.Dict[str, str]:
     return {}
 
 def init_routes(app : web.Application):
+    log = init_root_logger(logging.getLogger(__name__))
     #======== For testng page only ========
     app.add_routes([web.static('/static', 'static/')])
     #Setup Jinja template engine
@@ -115,7 +126,9 @@ def init_routes(app : web.Application):
         loader=jinja2.FileSystemLoader('templates/')
     )
     app.router.add_get("/", tester)
-    app['pool'] = ThreadPoolExecutor(max_workers=2)
+    
+    log.info("Starting worker pool")
+    app['pool'] = ThreadPoolExecutor(max_workers=2, initializer=models_preload, initargs=(PRELOAD_MODELS,))
 
     #Model APIs
     app.router.add_post("/detect", detect)

@@ -10,7 +10,11 @@ from vehiclebot.types import NUMBER_PLATE_PATTERN
 import pickle
 from uuid import uuid4
 
-def boxSortCentroidReadingOrder(boxes : np.ndarray):
+def boxSortCentroidReadingOrder(boxes : np.ndarray) -> np.ndarray:
+    boxes = np.array(boxes)
+    
+    if len(boxes) == 0: return boxes
+
     #Normalize
     boxes_norm = boxes-np.min(boxes,axis=(0,1))
     boxes_norm = boxes_norm/np.max(boxes_norm,axis=(0,1))

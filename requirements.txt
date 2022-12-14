@@ -2,6 +2,7 @@ aiohttp
 aiohttp-jinja2
 Jinja2
 pyee
+tqdm
 aiortc
 aiosignal
 async-timeout
@@ -19,3 +20,4 @@ scikit-image
 torch
 torchvision
 accelerate>=0.12.0
+aiomultiprocess

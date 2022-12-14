@@ -3,9 +3,10 @@ import asyncio
 
 LOG_GOOD_FORMAT = "[%(levelname)s] [%(name)s] (%(filename)s:%(lineno)d) %(message)s"
 
-def init_root_logger() -> logging.Logger:
+def init_root_logger(logger : logging.Logger = None) -> logging.Logger:
     '''Initialize just enough to get some output for root logger'''
-    logger = logging.getLogger()
+    if logger is None:
+        logger = logging.getLogger()
     if not logger.hasHandlers():
         logger.setLevel(logging.DEBUG)
         _stdout = logging.StreamHandler()

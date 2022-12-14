@@ -69,6 +69,7 @@ class RTCServer(RTCPeer):
 
         #Procedure to perform clean-up
         self.__app.on_shutdown.append(self.__on_app_shutdown_handler)
+        
 
     async def _populatePCOffer(self, pc : RTCPeerConnection):
         """
@@ -95,7 +96,7 @@ class RTCServer(RTCPeer):
         Also, this is where we begin our peer connection
         """
 
-        self.logger.debug("Got a client RTC offer from %s" % request.remote)
+        self.logger.debug("Got a client RTC offer from <%s>" % request.remote)
 
         #Convert given parameters to an RTCSessionDescription object to manipulate later
         params = await request.json()
@@ -115,10 +116,11 @@ class RTCServer(RTCPeer):
         #Monitor client's connection state. Remove from the list if disconnected
         @pc.on('connectionstatechange')
         async def on_pc_connstatechange():
-            self.logger.info("Connection state changed to: %s" % pc.connectionState)
+            self.logger.debug("Connection state of <%s> changed to: %s" % (request.remote, pc.connectionState))
             if pc.connectionState == "failed":
                 await pc.close()
             if pc.connectionState == "closed":
+                self.logger.info("Connection to <%s> closed" % request.remote)
                 self.__pc_list.discard(pc)
 
         #Set-up our data and AV channels

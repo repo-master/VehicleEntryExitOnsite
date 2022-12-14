@@ -97,24 +97,49 @@ function start(pc) {
 
     log_dc.onmessage = function(evt) {
         const data = JSON.parse(evt.data);
-        if (Array.isArray(data))
-            data.map(item => addLogMessage(new LogMessage(item)));
-        else
-            addLogMessage(new LogMessage(data));
+        const el = document.getElementById('vehicle_history');
+        let content = "";
+        for (let row of data) {
+            //console.log(row)
+            //const entry_ts = dayjs(row.entry_state_ts);
+            //const exit_ts = dayjs(row.exit_state_ts);
+            content += "<tr>";
+            content += "<td>";
+            content += row.plate_number;
+            content += "</td>";
+            content += "<td>";
+            content += row.type;
+            content += "</td>";
+            content += "<td>";
+            content += row.entry_state_ts;
+            content += "</td>";
+            content += "<td>";
+            content += row.exit_state_ts;
+            content += "</td>";
+            content += "<td>";
+            content += "-";
+            content += "</td>";
+            content += "</tr>";
+        }
+        el.innerHTML = content;
     };
 
     status_dc.onmessage = function(evt) {
         const data = JSON.parse(evt.data);
-        const el = document.getElementById('vehicle_data');
+        const el = document.getElementById('vehicle_detection');
+        console.log(data)
         let content = "";
         for (let row of data) {
-            const appear_ts = dayjs(row.detect_time);
+            const appear_ts = dayjs(row.last_state_timestamp);
             content += "<tr>";
             content += "<td>";
-            content += row.track_id;
+            content += row.plate_number;
             content += "</td>";
             content += "<td>";
-            content += row.plate_number;
+            content += row.type;
+            content += "</td>";
+            content += "<td>";
+            content += row.entry_exit_state;
             content += "</td>";
             content += "<td>";
             content += appear_ts.format();

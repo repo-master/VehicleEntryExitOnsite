@@ -22,23 +22,34 @@
             <video id="video_sub" autoplay muted style="height: 480px"></video>
         </div>-->
         <div class="row-xs-12 col-md-4">
-            <h6>Output:</h6>
-            <div style="height: 400px" class="overflow-auto border">
-                <ul id="vehicle_events" class="list-unstyled"></ul>
-            </div>
+            <h6>Vehicle Detection:</h6>
+            <table class="table table-striped table-responsive overflow-auto">
+                <thead>
+                    <tr>
+                        <th>Vehicle Number</th>
+                        <th class="d-block d-md-none d-xl-block">Vehicle Type</th>
+                        <th>Entry/Exit</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody id="vehicle_detection">
+                </tbody>
+            </table>
         </div>
     </div>
     <div class="row">
-        <h4 class="mt-4">Vehicles</h4>
+        <h4 class="mt-4">History data</h4>
         <table class="table table-striped table-responsive">
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>License plate</th>
-                    <th>Appeared at</th>
+                    <th>Vehicle Number</th>
+                    <th>Vehicle Type</th>
+                    <th>Entry Time</th>
+                    <th>Exit Time</th>
+                    <th>Duration</th>
                 </tr>
             </thead>
-            <tbody id="vehicle_data">
+            <tbody id="vehicle_history">
 
             </tbody>
         </table>

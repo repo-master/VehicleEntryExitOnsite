@@ -40,7 +40,7 @@ class CameraSourceProcess(threading.Thread):
             if self._enableCapture:
                 ret, frame = self.read_frame()
                 if ret:
-                    self._frame = frame
+                    self._frame = frame#cv2.resize(frame, (1920, 1080))
 
             next_time += (1.0 / self._update_rate)
             delaySleep = next_time - time.time()
@@ -111,7 +111,7 @@ class CameraSource(AIOTask, AsyncProcess):
 
     async def stop_task(self):
         self.logger.info("Stopping video capture...")
-        await self.task
+        await self.wait_task_timeout(5.0)
 
         if self.cap is not None:
             await self.cap.stop_capture()

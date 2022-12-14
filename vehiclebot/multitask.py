@@ -61,7 +61,9 @@ class AsyncProcess:
         '''
         class _A(cls):
             def __init__(self_new, *passargs, **passkwargs):
-                self._obj_id : str = self.proc.submit(AsyncProcess._mkinstance, cls, *passargs, **passkwargs).result()
+                _obj_make = self.proc.submit(AsyncProcess._mkinstance, cls, *passargs, **passkwargs)
+                _obj_make.add_done_callback(self._proc_done_callback())
+                self._obj_id : str = _obj_make.result()
             def __getattribute__(self_new, __name: str):
                 #TODO: Attributes
                 if callable(cls.__getattribute__(self_new, __name)):

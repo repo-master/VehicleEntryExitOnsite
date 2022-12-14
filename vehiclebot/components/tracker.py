@@ -22,6 +22,8 @@ import numpy as np
 
 import pickle
 
+#TODO: Use EKF to combine both boxes from featuretracker and detector
+
 class FeatureTracker:
     '''
     Uses OpenCV's single-object tracker to track quickly the bounding boxes
@@ -124,6 +126,8 @@ class TrackerProcess(threading.Thread):
         self._detections : queue.Queue[typing.Tuple[Detections, np.ndarray, float]] = queue.Queue(maxsize=10)
         self._trackresults : typing.Deque[typing.Dict] = collections.deque(maxlen=200)
 
+        self._aa = []
+
         #Start thread
         self.start()
 
@@ -132,7 +136,8 @@ class TrackerProcess(threading.Thread):
         self.join(timeout=timeout)
 
     def cleanup(self):
-        pass
+        print("Saving recording...", flush=True)
+        #pickle.dump(self._aa, open("unneeded/test7.pkl", "wb"))
 
     def run(self):
         if self._update_rate is None:
@@ -189,13 +194,15 @@ class TrackerProcess(threading.Thread):
                 -1 if is_lost else
                 (trk_id % (len(TRACK_COLORS)-1))
             ]
-            conf = trk[6]
+            conf : float = trk[6]
+            class_id : int = trk_obj.class_id
             
             detect_ts, update_ts = None, None
             traj_dir_angle = None
             traj_dir_mv = None
             traj_mv_spd = None
             traj_is_mv = None
+            traj_pos = None
             
             if hasattr(trk_obj, '_create_ts'):
                 detect_ts = trk_obj._create_ts
@@ -207,7 +214,7 @@ class TrackerProcess(threading.Thread):
                 traj_dir_mv = trj_obj['cardinal']
                 traj_mv_spd = trj_obj['speed']
                 traj_is_mv = trj_obj['is_moving']
-
+                traj_pos = np.array(trj_obj['curr_pos'])*inv_scale
 
             #Calculate centroid of current detection
             xcentroid, ycentroid = xmin + 0.5*width, ymin + 0.5*height
@@ -222,18 +229,24 @@ class TrackerProcess(threading.Thread):
             res_item = {
                 'track_id': trk_id,
                 'age': trk_obj.age,
+                'lost_for_frames': trk_obj.lost,
                 'img': img_crop,
+                'detection_class': (class_id, conf),
                 'is_new_detection': trk_obj.age == 1,
                 'bbox': (xmin, ymin, width, height),
                 'first_detect_ts': detect_ts,
                 'last_update_ts': update_ts,
                 'movement_speed': traj_mv_spd,
                 'is_moving': traj_is_mv,
+                'track_pos': traj_pos,
+                'centroid_pos': (xcentroid, ycentroid),
                 'estimated_movement_angle': traj_dir_angle,
                 'estimated_movement_direction': traj_dir_mv
             }
             results.append(res_item)
+
         self._trackresults.append(results)
+        self._aa.append((frame.copy(), results))
 
     #Public methods
 
@@ -261,6 +274,8 @@ class TrackerProcess(threading.Thread):
                     (int((bbox[0]+bbox[2])*inv_scale), int((bbox[1]+bbox[3])*inv_scale))
                 )
             
+            can_draw_lost = False
+
             #Extract all information to display
             trk_id = trk[1]
             is_lost = trk_obj.lost>0
@@ -279,15 +294,18 @@ class TrackerProcess(threading.Thread):
             xcentroid, ycentroid = int(xcentroid*inv_scale), int(ycentroid*inv_scale)
         
             txt_str = "{confidence:.2f}%".format(confidence=conf*100)
-            trk_text = "ID {}".format(trk_id) + (' LOST' if is_lost else '')
+            trk_text = "ID {}".format(trk_id) + (' LOST' if is_lost and can_draw_lost else '')
             
             ##Drawing
             #Bounding box
-            if ft_box is not None:
-                cv2.rectangle(img, *ft_box, (100,200,200), 1)
+            #if ft_box is not None:
+            #    cv2.rectangle(img, *ft_box, (100,200,200), 1)
 
-            cv2.rectangle(img, (xmin, ymin), (xmin+width, ymin+height), trk_color, 1 if is_lost else 2)
-        
+            if can_draw_lost or (not can_draw_lost and not is_lost):
+                if ft_box is not None:
+                    cv2.rectangle(img, *ft_box, trk_color, 2)
+                #cv2.rectangle(img, (xmin, ymin), (xmin+width, ymin+height), trk_color, 2)
+
             #Class and confidence
             txt_pos = [xmin, ymin]
             txt_pos[0] = max(txt_pos[0], 2)
@@ -342,7 +360,7 @@ class ObjectTracker(AIOTask, AsyncProcess):
             
     async def stop_task(self):
         self._stopEv.set()
-        await self.task
+        await self.wait_task_timeout(3.0)
 
     async def __call__(self):
         try:
@@ -366,9 +384,10 @@ class ObjectTracker(AIOTask, AsyncProcess):
                 img = await self.tracker.drawTrackBBoxes(img)
                 await self.tm.emit(self.output_dest, "frame", "Tracker", img)
                 
+            dets_task = self.tracker.getTracks()
             await self.tm.emit(
                 self.detection_output,
-                "detection", self.tracker.getTracks()
+                "detection", dets_task
             )
 
             next_time += (1.0 / self._update_rate)

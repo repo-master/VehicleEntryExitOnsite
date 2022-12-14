@@ -1,5 +1,5 @@
 
-from ..task import AIOTask, TaskOrTasks
+from vehiclebot.task import AIOTask, TaskOrTasks
 
 from .camera import CameraSource
 from vehiclebot.types import Detections
@@ -11,6 +11,7 @@ import asyncio
 import numpy as np
 
 import mimetypes
+from aiohttp.client import ClientSession
 import aiohttp.client_exceptions
 
 class RemoteObjectDetector(AIOTask):
@@ -20,6 +21,7 @@ class RemoteObjectDetector(AIOTask):
                  output : TaskOrTasks = None,
                  process_size : int = None,
                  img_format : str = ".png",
+                 server_endpoint : str = None,
                  **kwargs):
         super().__init__(tm, task_name, **kwargs)
         self.inp_src = input_source
@@ -30,7 +32,17 @@ class RemoteObjectDetector(AIOTask):
         
         self._update_rate = 10
         self._can_detect_after = time.time()
-        self.sess = self.tm.app.cli
+
+        self._detect_endpoint = "/detect"
+
+        if server_endpoint is None:
+            #TODO: Auto detect
+            server_endpoint = "http://localhost:8080/"
+            self._detect_endpoint = "/model" + self._detect_endpoint
+            if 'server' not in self.tm.app:
+                self.logger.warning("Server endpoint for model server not defined, and integrated server is not active. Detection may fail.")
+        
+        self.sess = ClientSession(base_url=server_endpoint)
         
         self._stopEv = asyncio.Event()
         
@@ -39,7 +51,7 @@ class RemoteObjectDetector(AIOTask):
             
     async def stop_task(self):
         self._stopEv.set()
-        await self.task
+        await self.wait_task_timeout()
 
     async def __call__(self):
         try:
@@ -81,7 +93,7 @@ class RemoteObjectDetector(AIOTask):
         #Send image to the model
         try:
             response = await self.sess.post(
-                "/detect",
+                self._detect_endpoint,
                 data=img_blob.tobytes(),
                 params={"model": self.model_name},
                 headers={"Content-Type": encode_mime}
@@ -99,8 +111,11 @@ class RemoteObjectDetector(AIOTask):
         except aiohttp.client_exceptions.ContentTypeError:
             retry_in_sec = 1.0
             self.logger.exception("Incorrect detection response, retrying after %.1f seconds:" % retry_in_sec)
-            self.logger.info("Content of above exception:\n>==========>\n%s\n<==========<" % await response.text())
+            self.logger.info("Content of above exception:\n<<<<<<<\n%s\n>>>>>>>" % await response.text())
             self._can_detect_after = time.time() + retry_in_sec
+        except asyncio.CancelledError:
+            #Task cancelled
+            pass
         except:
             retry_in_sec = 1.0
             self.logger.exception("Remote detection error, retrying after %.1f seconds:" % retry_in_sec)

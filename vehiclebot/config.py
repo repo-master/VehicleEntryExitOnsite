@@ -40,6 +40,10 @@ def load_config(cfg_file : os.PathLike):
     '''
     Simple wrapper to load config from .yaml file
     '''
-    with open(cfg_file, 'r') as f:
-        return load(f.read(), Loader)
+    try:
+        with open(cfg_file, 'r') as f:
+            return load(f.read(), Loader)
+    except FileNotFoundError as e:
+        logger.warning("Config file '%s' was not found" % cfg_file)
 
+    return {}

@@ -8,6 +8,9 @@ from .task import AIOTask
 
 from concurrent.futures import Executor, ThreadPoolExecutor
 
+import tqdm.asyncio
+from tqdm.contrib.logging import logging_redirect_tqdm
+
 from typing import Dict, List, Type, Union
 
 def module_path_decode(module_string : str, default_package : str = __name__):
@@ -26,6 +29,8 @@ class TaskManager(object):
         res = cor.result()
         if res is not None:
             self.logger.info("Task %s completed with result: %s", cor.get_name(), res)
+        else:
+            self.logger.debug("Task %s closed", cor.get_name())
 
     async def add_task(self, task_name : str, task_conf : Dict):
         '''
@@ -65,10 +70,15 @@ class TaskManager(object):
         await self.tasks[task_name].stop_task()
         
     async def enumerate_tasks(self, task_list : Dict[str, Dict]):
-        await asyncio.gather(*[self.add_task(*k) for k in task_list.items()])
-
+        task_list = [self.add_task(*k) for k in task_list.items()]
+        with logging_redirect_tqdm():
+            return [await f for f in tqdm.asyncio.tqdm.as_completed(task_list)]
+            
     async def close(self):
-        await asyncio.gather(*[self.shutdown_task(k) for k in self.tasks.keys()])
+        task_list = [self.shutdown_task(k) for k in self.tasks.keys()]
+        with logging_redirect_tqdm():
+            for f in tqdm.asyncio.tqdm.as_completed(task_list):
+                await f
         self.pool.shutdown()
 
     async def emit(self, task : Union[AIOTask, str, List[Union[AIOTask, str]]], event : str, *args, **kwargs) -> Union[bool, List[bool]]:
@@ -77,7 +87,11 @@ class TaskManager(object):
             return await asyncio.gather(*[self.emitTask(x, event, *args, **kwargs) for x in task])
         task_obj : AIOTask = task
         if isinstance(task, str):
-            task_obj = self[task]
+            try:
+                task_obj = self[task]
+            except KeyError:
+                self.logger.error("Task '%s' not found", task)
+                return False
         return task_obj.emit(event, *args, **kwargs)
 
     def __getitem__(self, idx : str):
