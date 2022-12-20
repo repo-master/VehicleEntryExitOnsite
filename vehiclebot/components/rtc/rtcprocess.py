@@ -12,7 +12,7 @@ from time import time
 TMP_CLASSID_TO_TYPE : typing.Dict[int, str] = {
     0: 'Car',
     1: 'Car',
-    2: 'Rickshaw',
+    2: 'Car',
     3: 'Two-wheeler',
     4: 'Car',
     5: 'Car',
@@ -23,7 +23,7 @@ TMP_CLASSID_TO_TYPE : typing.Dict[int, str] = {
     10: 'Two-wheeler',
     11: 'Car',
     12: 'Car',
-    13: 'Rickshaw',
+    13: 'Car',
     14: 'Two-wheeler',
     15: 'Car',
     16: 'Car',
@@ -158,7 +158,7 @@ class RTCDataProcess(DetectionHandler):
 
     async def __call__(self):
         while not self._stop.is_set():
-            is_stop, next_items = await asyncio.gather(self._stop.wait_for(timeout=.1), self.save_queue.get_wait_for(timeout=.3))
+            is_stop, next_items = await asyncio.gather(self._stop.wait_for(timeout=.01), self.save_queue.get_wait_for(timeout=.01))
             if is_stop: break
             if next_items is None: continue
             #print("Items batch", next_items)
@@ -288,7 +288,7 @@ class RTCDataProcess(DetectionHandler):
     def calculate_duration(self, det : Detection):
         entry_ts = det.get("entry_ts")
         exit_ts = det.get("exit_ts")
-        if entry_ts is not None and exit_ts is not None:
+        if entry_ts is not None and exit_ts is not None and exit_ts > entry_ts:
             return exit_ts - entry_ts
 
     async def _updateVehicleData(self):
@@ -309,6 +309,31 @@ class RTCDataProcess(DetectionHandler):
             for x,y in self.plates.items()
         ], key=lambda o: o['last_state_timestamp'], reverse=True)
 
+        '''vehicle_data.extend([
+            {
+                "id": 'fake1',
+                "plate_number": 'GA 07 K 5880',
+                "type": 'Car',
+                "entry_exit_state": 'Exit',
+                "entry_state_ts": datetime.datetime(2022,12,15,18,13,22,14),
+                "exit_state_ts": datetime.datetime(2022,12,15,18,36,11,1),
+                "presence_duration": datetime.datetime(2022,12,15,18,36,11,1)-datetime.datetime(2022,12,15,18,13,22,14),
+                "last_state_timestamp": datetime.datetime(2022,12,15,18,36,11,1),
+                "is_active": False
+            },
+            {
+                "id": 'fake2',
+                "plate_number": 'GA 07 V 0384',
+                "type": 'Two Wheeler',
+                "entry_exit_state": 'Entry',
+                "entry_state_ts": datetime.datetime(2022,12,17,12,8,6,8),
+                "exit_state_ts": '-',
+                "presence_duration": None,
+                "last_state_timestamp": datetime.datetime(2022,12,17,12,8,6,8),
+                "is_active": False
+            }
+        ])'''
+
         self.handlers['status'].broadcast(list(filter(lambda o: o['is_active'], vehicle_data)))
         self.handlers['log'].broadcast(vehicle_data)
 
@@ -317,12 +342,3 @@ class RTCDataProcess(DetectionHandler):
         #Mark as done (changes sent)
         for x in self.plates.values():
             x.update({"is_updated": False})
-
-        '''self.handlers['status'].broadcast(sorted([
-            {
-                "track_id": det['track_id'],
-                "plate_number": (det['plate']['plate_str'] or 'Unknown') if 'plate' in det else 'Detecting...',
-                "detect_time": det.get('first_detect_ts')
-            }
-            for det in self._all_detections.values()
-        ], key=lambda o: o['detect_time'], reverse=True))'''

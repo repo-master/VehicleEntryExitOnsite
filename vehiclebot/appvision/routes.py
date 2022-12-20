@@ -6,7 +6,6 @@ import jinja2
 import cv2
 import numpy as np
 
-from datetime import datetime
 from concurrent.futures.thread import ThreadPoolExecutor
 import asyncio
 import logging
@@ -16,24 +15,27 @@ import importlib
 
 from . import recog3 as recognition
 
-from ..model.yolodnn import (YOLOModelCV2, YOLOModelTransformers)
+from ..model.yolodnn import (YOLOModelCV2, YOLOModelYOLOv5, YOLOModelTransformers)
 from ..model.ocr import OCRModelTransformers
 from ..model.craft import CRAFTModel
 from ..log import init_root_logger
 
-VEHICLE_DETECT_MODEL_FILE = "models/vehicles.zip"
+VEHICLE_DETECT_MODEL_FILE = "models/yolov5-vehicle-best.pt"
 PLATE_DETECT_MODEL_FILE = "nickmuchi/yolos-small-finetuned-license-plate-detection"
 PLATE_DECODE_MODEL_FILE = "microsoft/trocr-small-printed"
 TEXT_DETECT_MODEL_FILE = "models/craft_mlt_25k.pth"
 
+#Auto-detect device to use
+DEVICE = None
+
 MODEL_LOADERS = {
-    'vehicle_yolov5': (YOLOModelCV2.fromZip, (VEHICLE_DETECT_MODEL_FILE,), {}),
-    'plate_detect_hf_yolos': (YOLOModelTransformers.fromHuggingFace, (PLATE_DETECT_MODEL_FILE,), dict(cache_dir="models/.transformer-cache/")),
-    'plate_decode_hf_trocr': (OCRModelTransformers.fromHuggingFace, (PLATE_DECODE_MODEL_FILE,), dict(cache_dir="models/.transformer-cache/")),
-    'text_detect_pt_craft': (CRAFTModel.fromCRAFT, (TEXT_DETECT_MODEL_FILE,), {})
+    'vehicle_yolov5': (YOLOModelYOLOv5.fromPT, (VEHICLE_DETECT_MODEL_FILE,), dict(device=DEVICE)),
+    'plate_detect_hf_yolos': (YOLOModelTransformers.fromHuggingFace, (PLATE_DETECT_MODEL_FILE,), dict(cache_dir="models/.transformer-cache/", device=DEVICE)),
+    'plate_decode_hf_trocr': (OCRModelTransformers.fromHuggingFace, (PLATE_DECODE_MODEL_FILE,), dict(cache_dir="models/.transformer-cache/", device=DEVICE)),
+    'text_detect_pt_craft': (CRAFTModel.fromCRAFT, (TEXT_DETECT_MODEL_FILE,), dict(device=DEVICE))
 }
 
-PRELOAD_MODELS = ['vehicle_yolov5']
+PRELOAD_MODELS = []
 
 #Data load helpers
 
@@ -60,7 +62,7 @@ def models_preload(model_list : list):
 
 def detect_task(img_buf, model_detector):
     model = get_model(model_detector)
-    return model.detect(decode_image(img_buf), zip_results=False, label_str=False, min_score=0.2)
+    return model.detect(decode_image(img_buf), min_confidence=0.25)
 
 def recognize_task(img_buf, detect_model, text_detect_model, ocr_model):
     importlib.reload(recognition)
@@ -88,7 +90,7 @@ async def detect(req : web.Request) -> web.Response:
         await req.content.read(),
         req.query.get('model', 'vehicle_yolov5')
     )
-    
+
     return web.json_response({
         'detection': {
             'bboxes': res[0],

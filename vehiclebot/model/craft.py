@@ -1,5 +1,5 @@
 
-from .model import Model
+from .model import Model, TorchModel
 from vehiclebot import imutils
 
 import numpy as np
@@ -28,23 +28,17 @@ def copyStateDict(state_dict):
 
 class CRAFTModel(Model):
     @classmethod
-    def fromCRAFT(cls, model_path : str):
-        return cls(**cls._loadCRAFT(model_path))
+    def fromCRAFT(cls, model_path : str, **kwargs):
+        return cls(**cls._loadCRAFT(model_path, **kwargs))
 
     @classmethod
     def _loadCRAFT(cls, model_path : str, device : str = None) -> dict:
-        net = CRAFT()
-        labels = []
         meta = {}
-
-        if device is None:
-            #Can use NVIDIA GPU if available
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        else:
-            device = torch.device(device)
-            
+        device = TorchModel.getDevice(device)
         meta['device'] = device
 
+        net = CRAFT()
+        
         #Load pre-trained model and weights
         net.load_state_dict(copyStateDict(torch.load(model_path, map_location=device)))
 
@@ -58,7 +52,6 @@ class CRAFTModel(Model):
 
         return {
             "net" : net,
-            "class_labels": labels,
             "metadata" : meta
         }
 
@@ -69,7 +62,10 @@ class CRAFTModel(Model):
         min_score : float = 0.6,
         min_nms : float = 0.45):
         
-        device = self._meta['device']
+        device = self.metadata['device']
+
+        #Invalid image
+        if img.shape[0]*img.shape[1] == 0: return
         
         img_resized, target_ratio, size_heatmap = imutils.resize_aspect_ratio(img/255, 1280, cv2.INTER_CUBIC)
         ratio_h = ratio_w = 1 / target_ratio
@@ -79,7 +75,7 @@ class CRAFTModel(Model):
         x = x.to(device)
         
         with torch.no_grad():
-            y, _ = self._net(x)
+            y, _ = self.net(x)
         
         # make score and link map
         score_text = y[0,:,:,0].cpu().data.numpy()

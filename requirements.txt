@@ -1,3 +1,5 @@
+#vehiclebot
+ipyfilechooser
 aiohttp
 aiohttp-jinja2
 Jinja2
@@ -6,13 +8,19 @@ tqdm
 aiortc
 aiosignal
 async-timeout
--e git+https://github.com/adipandas/multi-object-tracker.git@bfbc2b1a357ab1fa27a5eaef86430559e9ee58ca#egg=multi_object_tracker
-ipyfilechooser
-numpy
-opencv-contrib-python
 python-decouple
 PyYAML
+aiomultiprocess
+
+#Vision/tracking (Do NOT install opencv-python)
+opencv-contrib-python
+numpy
 scipy
+
+#vehiclebot.components.tracker
+-e git+https://github.com/adipandas/multi-object-tracker.git@bfbc2b1a357ab1fa27a5eaef86430559e9ee58ca#egg=multi_object_tracker
+
+#vehiclebot.model
 transformers
 sentencepiece
 protobuf==3.20.1
@@ -20,4 +28,9 @@ scikit-image
 torch
 torchvision
 accelerate>=0.12.0
-aiomultiprocess
+
+#vehiclebot.components.rtc.rtcprocess
+humanize
+
+#yolov5
+seaborn

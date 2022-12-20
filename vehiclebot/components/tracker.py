@@ -44,6 +44,13 @@ class FeatureTracker:
         #TODO: Better way to do this, maybe queue
         self._newFrameReceived = True
 
+    @staticmethod
+    def validateBBox(bbox : np.ndarray, image_shape : np.ndarray) -> bool:
+        return (
+            np.prod(bbox.shape[2:])>0 #BBox should not be size 0 in any dimension
+            and all((bbox[2:]+bbox[:2])<=image_shape[1::-1]) #BBox should not fall outside of the image
+        )
+
     def updateDetection(self, det_frame : np.ndarray):
         '''Update tracking features from the frame to use as template'''
         if det_frame is None:
@@ -61,12 +68,16 @@ class FeatureTracker:
             setattr(trk_obj, "%s_bbox" % _tracker_id, tuple(trk_obj.bbox))
             setattr(trk_obj, '_is_lost', trk_obj.lost > 20)
 
-            is_fresh = trk_obj.lost == 0
+            can_update_tracker = (
+                trk_obj.lost == 0 #If data of tracker is from a good detection
+                and self.validateBBox(trk_obj.bbox, frame_scaled.shape)
+                #TODO: Check time period
+            )
 
-            if is_fresh:
+            if can_update_tracker:
                 #Init feature tracker with new frame
                 ftrack = getattr(trk_obj, _tracker_id)
-                ftrack.init(frame_scaled, trk_obj.bbox.astype(int))
+                ftrack.init(frame_scaled, np.clip(trk_obj.bbox, (0, 0, 0, 0), np.resize(frame_scaled.shape[1::-1], 4)).astype(int))
                 
     def getBBox(self, trk_obj) -> np.ndarray:
         _tracker_id = self.trackerID()
@@ -77,29 +88,30 @@ class FeatureTracker:
         '''Update the trackers' bbox by feature matching current detection with current updated frame'''
         if self._lastFrame is None or not self._newFrameReceived:
             return
-        
+
         self._newFrameReceived = False
         _tracker_id = self.trackerID()
-        
+
         scale = getattr(self._tracker, "_scale", 1.0)
         frame_scaled, _ = scaleImgRes(self._lastFrame, scale=scale)
 
         for trk_obj in self._tracker.tracks.values():
             if hasattr(trk_obj, _tracker_id):
                 ftrack = getattr(trk_obj, _tracker_id)
-                success, new_bbox = ftrack.update(frame_scaled)
-                if success:
-                    setattr(trk_obj, "%s_bbox" % _tracker_id, new_bbox)
-                   
-                needs_tracker_nudge = (
-                    trk_obj._is_lost or
-                    (datetime.now()-trk_obj._update_ts) > timedelta(seconds=2.0)
-                )
-                if needs_tracker_nudge:
-                    #Nudge the tracker bbox towards the feature bbox just so that detection could be possible
-                    #TODO: only move it just little using tween
-                    trk_obj.bbox = np.array(new_bbox)
-                    
+                if self.validateBBox(trk_obj.bbox, frame_scaled.shape):
+                    success, new_bbox = ftrack.update(frame_scaled)
+                    if success:
+                        setattr(trk_obj, "%s_bbox" % _tracker_id, new_bbox)
+
+                    needs_tracker_nudge = (
+                        trk_obj._is_lost or
+                        (datetime.now()-trk_obj._update_ts) > timedelta(seconds=2.0)
+                    )
+                    if needs_tracker_nudge:
+                        #Nudge the tracker bbox towards the feature bbox just so that detection could be possible
+                        #TODO: only move it just little using tween
+                        trk_obj.bbox = np.array(new_bbox)
+
     __call__ = update
     
 class TrackerProcess(threading.Thread):
@@ -136,7 +148,8 @@ class TrackerProcess(threading.Thread):
         self.join(timeout=timeout)
 
     def cleanup(self):
-        print("Saving recording...", flush=True)
+        pass
+        #print("Saving recording...", flush=True)
         #pickle.dump(self._aa, open("unneeded/test8.pkl", "wb"))
 
     def run(self):

@@ -1,5 +1,5 @@
 
-from .model import Model, CV2ModelZipped, HFTransformerModel
+from .model import Model, CV2ModelZipped, TorchModel, HFTransformerModel
 
 import numpy as np
 import typing
@@ -8,14 +8,18 @@ import cv2
 from transformers import AutoFeatureExtractor, AutoModelForObjectDetection
 import torch
 
+import yolov5
+from yolov5.models.common import Detections as Yolov5Detections
+from motrackers.utils.misc import xyxy2xywh
+
 class YOLOModel(Model):
     _NEED_UNSCALE = False
     def detect(self,
         img : np.ndarray,
-        zip_results : bool = True,
+        zip_results : bool = False,
         label_str : bool = False,
         min_confidence : float = 0.55,
-        min_score : float = 0.6,
+        min_score : float = 0.2,
         min_nms : float = 0.45):
         
         blob = self._phase_preprocess(img)
@@ -26,7 +30,7 @@ class YOLOModel(Model):
         return detections
 
     def _phase_preprocess(self, img : np.ndarray):
-        raise NotImplementedError()
+        return img
     
     def _phase_forward(self, inp):
         raise NotImplementedError()
@@ -41,20 +45,18 @@ class YOLOModel(Model):
         confidences = []
         boxes = []
         
-        rows = detections[0].shape[1]
         image_height, image_width = img_orig.shape[:2]
         
         #Since we resized image to fit YOLO's layer shape, we need to rescale points to original
         if self._NEED_UNSCALE:
-            net_size = self._meta['net_input_size']
+            net_size = self.metadata['net_input_size']
             x_factor = image_width / net_size[0]
             y_factor =  image_height / net_size[1]
         else:
             x_factor = 1
             y_factor = 1
 
-        for r in range(rows):
-            row = detections[0][0][r]
+        for row in detections[0][0]:
             confidence = row[4]
             if confidence >= min_confidence:
                 classes_scores = row[5:]
@@ -73,9 +75,6 @@ class YOLOModel(Model):
 
                     boxes.append(box)
         
-        if label_str:
-            class_ids = list(map(self.getLabel, class_ids))
-
         return (np.array(boxes), np.array(confidences), np.array(class_ids))
 
     def _phase_nms(self, detections : tuple, min_confidence : float, min_nms : float) -> tuple:
@@ -89,7 +88,7 @@ class YOLOModel(Model):
 class YOLOModelCV2(CV2ModelZipped, YOLOModel):
     _NEED_UNSCALE = True
     def _phase_preprocess(self, img : np.ndarray):
-        frame_size = self._meta['net_input_size']
+        frame_size = self.metadata['net_input_size']
 
         cropped_img = img
         
@@ -113,11 +112,47 @@ class YOLOModelCV2(CV2ModelZipped, YOLOModel):
             swapRB=True, crop=False)
     
     def _phase_forward(self, inp : np.ndarray):
-        self._net.setInput(inp)
-        return self._net.forward(self._net.getUnconnectedOutLayersNames())
+        self.net.setInput(inp)
+        return self.net.forward(self.net.getUnconnectedOutLayersNames())
     
-class YOLOModelTorch(YOLOModel):
-    pass
+class YOLOModelYOLOv5(TorchModel, YOLOModel):
+    @classmethod
+    def _loadPT(cls, model_path : str, device : str = None) -> dict:
+        meta = {}
+        device = cls.getDevice(device)
+        meta['device'] = device
+        
+        net = yolov5.load(model_path, device=device)
+        
+        return {
+            "net" : net,
+            "metadata" : meta
+        }
+    
+    def detect( self,
+                img : np.ndarray,
+                min_confidence : float = 0.55):
+        self.net.conf = min_confidence  # NMS confidence threshold
+        self.net.iou = 0.45  # NMS IoU threshold
+        self.net.agnostic = False  # NMS class-agnostic
+        self.net.multi_label = False  # NMS multiple labels per box
+        self.net.max_det = 1000  # maximum number of detections per image
+        outputs = self.net(img)
+        detections = self._phase_unwrap(outputs)
+        return detections
+
+    def _phase_unwrap(self,
+                      detections : Yolov5Detections,
+                      *args, **kwargs):
+        predictions = detections.pred[0]
+        boxes = predictions[:, :4] # x1, y1, x2, y2
+        scores = predictions[:, 4]
+        categories = predictions[:, 5]
+        return (
+            xyxy2xywh(boxes.detach().cpu().numpy()),
+            scores.detach().cpu().numpy(),
+            categories.detach().cpu().numpy().astype(int)
+        )
 
 class YOLOModelTransformers(HFTransformerModel, YOLOModel):
     '''
@@ -125,15 +160,8 @@ class YOLOModelTransformers(HFTransformerModel, YOLOModel):
     '''
     @classmethod
     def _loadTransformer(cls, model_path : str, device : str = None, cache_dir = None) -> dict:
-        labels = []
         meta = {}
-        
-        if device is None:
-            #Can use NVIDIA GPU if available
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        else:
-            device = torch.device(device)
-            
+        device = TorchModel.getDevice(device)
         meta['device'] = device
         
         net = {
@@ -143,17 +171,16 @@ class YOLOModelTransformers(HFTransformerModel, YOLOModel):
         
         return {
             "net" : net,
-            "class_labels": labels,
             "metadata" : meta
         }
 
     def _phase_preprocess(self, img : np.ndarray) -> dict:
-        device = self._meta['device']
-        feature_tensors = self._net['exractor'](images=[img], return_tensors="pt").pixel_values
+        device = self.metadata['device']
+        feature_tensors = self.net['exractor'](images=[img], return_tensors="pt").pixel_values
         return feature_tensors.to(device)
         
     def _phase_forward(self, inp):
-        return self._net['detector'](pixel_values = inp)
+        return self.net['detector'](pixel_values = inp)
         
     def _phase_unwrap(self,
                       img_orig : np.ndarray,
@@ -165,9 +192,9 @@ class YOLOModelTransformers(HFTransformerModel, YOLOModel):
         confidences = []
         boxes = []
         
-        device = self._meta['device']
+        device = self.metadata['device']
         img_sizes = torch.Tensor([img_orig.shape[:2]]).to(device)
-        results = self._net['exractor'].post_process_object_detection(detections, threshold=min_confidence, target_sizes=img_sizes)
+        results = self.net['exractor'].post_process_object_detection(detections, threshold=min_confidence, target_sizes=img_sizes)
         #0th because one image, but loop in all detections
         result = results[0]
         for score, label, box in zip(result["scores"], result["labels"], result["boxes"]):

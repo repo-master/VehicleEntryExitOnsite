@@ -30,7 +30,7 @@ class AIOTask(AsyncIOEventEmitter):
     
     async def wait_task_timeout(self, task = None, timeout : float = 5.0):
         if task is None: task = self.task
-        return self.wait_task_timeout_autocancel(task, timeout, self.logger)
+        return await self.wait_task_timeout_autocancel(task, timeout, self.logger)
 
     @staticmethod
     async def wait_task_timeout_autocancel(task : asyncio.Task, timeout : float = 5.0, logger : logging.Logger = None):

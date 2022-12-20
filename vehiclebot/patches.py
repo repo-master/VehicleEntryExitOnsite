@@ -16,9 +16,9 @@ from collections.abc import Iterable
 class JSONifier(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, datetime.datetime):
-            return obj.isoformat()
+            return obj.strftime("%Y-%m-%d %H:%M:%S")
         if isinstance(obj, datetime.timedelta):
-            return humanize.precisedelta(obj)
+            return humanize.precisedelta(obj, format='%.0f')
         if isinstance(obj, np.ndarray):
             return obj.tolist()
         if isinstance(obj, Iterable):

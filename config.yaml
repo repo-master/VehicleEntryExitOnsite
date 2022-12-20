@@ -1,4 +1,4 @@
-#Application configuration
+##### Application configuration #####
 app:
   #Config for customer requirements
   customer:
@@ -33,15 +33,22 @@ app:
           #Hint at what type of camera is being pointed
           kind: media
           #Which camera device to use (index, path or url of stream)
-          src: "media/21194152-preview.mp4" #"media/car_park.mp4"
+          src: 0
+          #Skip beginning x number of frames in case there is no activity there
           skip_frames: 0
+          #Slow down footage (frame rate cap) to make demo easier to view
           throttle_fps: 16
 
+  #Conenction to backend API for database and history data APIs
+  #This API will require authentication using `site_id` and `site_key` (defined above)
+  #in order to accept the requests
   api:
     api_base: http://192.168.0.9:5000/
     ws_base: ws://localhost:5000/
 
   #Task configuration
+  #These tasks will run along with the application to perform
+  #any processing task, such as vehicle tracking, communication
   tasks:
     camera_source:
       type: CameraSource
@@ -60,7 +67,7 @@ app:
 
         #ROI tracker configuration
         tracker:
-          # Check out the motrackers library to find out which trackers are supported
+          # Check out the 'motrackers' library to find out which trackers are supported
           type: SORT
           #Number of detection frames till lost
           max_lost: 10
@@ -70,20 +77,29 @@ app:
         
     #Sends detections found in the video input to the tracker
     vehicle_detector:
-     type: RemoteObjectDetector
-     properties:
-       input_source: camera_source
-       model: vehicle_yolov5
-       output: vehicle_tracker
-       process_size: 240
-       img_format: .png
-       server_endpoint: !env MODEL_SERVER
+      type: RemoteObjectDetector
+      properties:
+        input_source: camera_source
+        #Which detection model to use
+        model: vehicle_yolov5
+        output: vehicle_tracker
+        #Lower resolutions will be faster to process (less bandwidth) but will have less precision
+        #and accuracy than full-size frame. Size of 640 is default (YOLOv5 frame size)
+        process_size: 360
+        #Image encoding
+        img_format: .png
+        #Endpoint of the server API to use for detection
+        #server_endpoint: !env MODEL_SERVER
+        server_endpoint: http://localhost:5000/
 
     license_plate_decoder:
       type: vehiclebot.components.plate.PlateRecognizer
       properties:
-        server_endpoint: !env MODEL_SERVER
+        #Endpoint of the server API to use for plate recognition
+        #server_endpoint: !env MODEL_SERVER
+        server_endpoint: http://localhost:5000/
 
+    #To gather all detections, associate them with a vehicle number and generate entry/exit timestamps
     vehicle_manager:
       type: vehiclebot.components.rtc.rtcprocess.RTCDataProcess
       properties:
@@ -93,17 +109,21 @@ app:
     vidstream_main:
       type: RTCStreamTrack
 
-  #Management web server
+  #Management web server. Uncomment to enable
   management:
+    app_name: VHawk
     
+  #Admin backend (unfinished). Uncomment to enable
   admin:
     
+  #Integrated model server (run along with main app on startup). Uncomment to enable
   #integrated_model_server:
     
 
-#Logging configuration
+##### Logging configuration #####
 logger:
   version: 1
+  disable_existing_loggers: false
   root:
     level: INFO
     handlers:

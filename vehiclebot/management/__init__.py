@@ -11,12 +11,13 @@ from typing import Dict
 Template functions
 '''
 
-@aiohttp_jinja2.template("dashboard.j2.html")
-async def page_dashboard(request: web.Request) -> Dict[str, str]:
-    return {"APIBASE": '/'}
+def page_dashboard(app_name = 'Vehicle Management', **kwargs):
+    @aiohttp_jinja2.template("dashboard.j2.html")
+    async def _page_dashboard(request: web.Request) -> Dict[str, str]:
+        return {"APIBASE": '/', 'APP_NAME': app_name}
+    return _page_dashboard
 
-
-def init_routes(app : web.Application):
+def init_routes(app : web.Application, **cfg):
     '''
     Setup Jinja2 and add the needed routes to aiohttp server
     '''
@@ -30,6 +31,6 @@ def init_routes(app : web.Application):
         loader=jinja2.FileSystemLoader('templates/')
     )
     
-    app.router.add_get("/", page_dashboard)
+    app.router.add_get("/", page_dashboard(**cfg))
     
     app['rtc'] = RTCServer(app)

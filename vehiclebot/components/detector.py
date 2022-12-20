@@ -52,6 +52,7 @@ class RemoteObjectDetector(AIOTask):
     async def stop_task(self):
         self._stopEv.set()
         await self.wait_task_timeout()
+        await self.sess.close()
 
     async def __call__(self):
         try:

@@ -129,10 +129,8 @@ function start(pc) {
     status_dc.onmessage = function(evt) {
         const data = JSON.parse(evt.data);
         const el = document.getElementById('vehicle_detection');
-        console.log(data)
         let content = "";
         for (let row of data) {
-            const appear_ts = dayjs(row.last_state_timestamp);
             content += "<tr>";
             content += "<td>";
             content += row.plate_number;
@@ -144,7 +142,7 @@ function start(pc) {
             content += row.entry_exit_state;
             content += "</td>";
             content += "<td>";
-            content += appear_ts.format();
+            content += row.last_state_timestamp;
             content += "</td>";
             content += "</tr>";
         }

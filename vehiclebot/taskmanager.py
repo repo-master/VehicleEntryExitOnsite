@@ -60,7 +60,7 @@ class TaskManager(object):
         props = task_conf.get('properties') or {}
         self.tasks[task_name] = task_cls(self, task_name, **props)
         await self.tasks[task_name].start_task()
-        self.tasks[task_name].task = asyncio.create_task(self.tasks[task_name]())
+        self.tasks[task_name].task = asyncio.create_task(self.tasks[task_name](), name='AIOTask{%s}' % task_name)
         self.tasks[task_name].task.add_done_callback(self._handle_task_done)
         self.logger.info("Task \"%s\" (id: %s) created" % (task_name, self.tasks[task_name].task.get_name()))
         return self.tasks[task_name]
@@ -72,16 +72,22 @@ class TaskManager(object):
     async def enumerate_tasks(self, task_list : Dict[str, Dict]):
         task_list = [self.add_task(*k) for k in task_list.items()]
         with logging_redirect_tqdm():
-            return [await f for f in tqdm.asyncio.tqdm.as_completed(task_list)]
+            return await tqdm.asyncio.tqdm.gather(*task_list)
             
     async def close(self):
         task_list = [self.shutdown_task(k) for k in self.tasks.keys()]
         with logging_redirect_tqdm():
-            for f in tqdm.asyncio.tqdm.as_completed(task_list):
-                await f
+            await tqdm.asyncio.tqdm.gather(*task_list)
         self.pool.shutdown()
 
+        #Find all active tasks and shut them down
+        pending = asyncio.all_tasks()
+        #TODO
+
     async def emit(self, task : Union[AIOTask, str, List[Union[AIOTask, str]]], event : str, *args, **kwargs) -> Union[bool, List[bool]]:
+        '''
+        Emit an event to the given task (task name or task object) or tasks with given arguments
+        '''
         if task is None: return False
         if isinstance(task, list):
             return await asyncio.gather(*[self.emitTask(x, event, *args, **kwargs) for x in task])
@@ -90,7 +96,7 @@ class TaskManager(object):
             try:
                 task_obj = self[task]
             except KeyError:
-                self.logger.error("Task '%s' not found", task)
+                self.logger.warning("Task '%s' not found", task)
                 return False
         return task_obj.emit(event, *args, **kwargs)
 

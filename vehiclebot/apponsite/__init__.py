@@ -23,9 +23,6 @@ from vehiclebot.management import init_routes
 
 root_logger : logging.Logger = init_root_logger()
 
-CFG_FILE = deconf('CONFIG', default='config.yaml')
-DISABLE_TASKS = deconf('NO_TASKS', cast=bool, default=False)
-
 def client_session_ctx(api : dict):
     async def _wrap_client_session_ctx(app : Application):
         '''
@@ -59,8 +56,12 @@ async def VehicleEntryExitOnSite(loop : asyncio.AbstractEventLoop = None, debug 
 
     loop.set_exception_handler(aio_exc_hdl)
 
+    #Config data
+    CFG_FILE = deconf('CONFIG', default='config.yaml')
+    DISABLE_TASKS = deconf('NO_TASKS', cast=bool, default=False)
+
     #Load configuration data
-    root_logger.info("Loading configuration file...")
+    root_logger.info("Loading configuration file from '%s'...", CFG_FILE)
     cfg = load_config(CFG_FILE)
 
     #Set-up the logger from config
@@ -80,7 +81,7 @@ async def VehicleEntryExitOnSite(loop : asyncio.AbstractEventLoop = None, debug 
     
     #Management pages
     if "management" in app['cfg']:
-        init_routes(app)
+        init_routes(app, **(app['cfg'].get('management') or {}))
         root_logger.info("Management routes added")
     
     if "integrated_model_server" in app['cfg']:

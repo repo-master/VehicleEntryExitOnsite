@@ -40,8 +40,9 @@ class PlateRecognizer(AIOTask):
         
     async def stop_task(self):
         await self.wait_task_timeout()
-        
-    async def detectAndDecode(self, detection : dict, when : float = None) -> PlateDetection:
+        await self.sess.close()
+
+    async def _doPlateDetectDecodeTask(self, detection : dict, when : float = None) -> PlateDetection:
         if when is None: when = time.time()
         #TODO: Choose which images to send by measuring likelyhood of getting detection
         img = detection.get('img')
@@ -84,3 +85,6 @@ class PlateRecognizer(AIOTask):
             self.logger.exception("Remote detection error, retrying after %.1f seconds:" % retry_in_sec)
             self._can_detect_after = time.time() + retry_in_sec
 
+
+    async def detectAndDecode(self, detection : dict, when : float = None) -> PlateDetection:
+        return await self._doPlateDetectDecodeTask(detection, when)

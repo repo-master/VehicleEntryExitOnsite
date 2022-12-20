@@ -4,22 +4,38 @@ import json
 import typing
 import zipfile
 
-import cv2
 import numpy as np
 
 class Model:
-    def __init__(self, net, class_labels : typing.List[str] = None, metadata : typing.Dict = dict()):
-        self._net = net
-        self._meta = metadata
-        self.class_labels = class_labels
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
     
     def detect(self, img : np.ndarray, *args, **kwargs):
         pass
 
-    def getLabel(self, idx : int) -> str:
-        if not self.class_labels: return
-        return self.class_labels[idx]
-    
+class TorchModel(Model):
+    @classmethod
+    def fromPT(cls, model_path : str, *args, **kwargs):
+        return cls(**cls._loadPT(model_path, *args, **kwargs))
+
+    @classmethod
+    def _loadPT(cls, model_path : str, **kwargs) -> dict:
+        raise NotImplementedError()
+
+    @staticmethod
+    def getDevice(device : str = None):
+        import torch
+        if device is None:
+            #Can use NVIDIA GPU if available
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        elif isinstance(device, str):
+            device = torch.device(device)
+        elif isinstance(device, torch.device):
+            return device
+        else:
+            raise TypeError("Parameter 'device' has invalid type %s" % type(device))
+        return device
+
 class CV2ModelZipped(Model):
     @classmethod
     def fromZip(cls, model_zip_file : os.PathLike):
@@ -48,12 +64,13 @@ class CV2ModelZipped(Model):
         }
 
     @staticmethod
-    def loadNetFromBuffer(buf : bytes, framework : str = "onnx") -> cv2.dnn.Net:
+    def loadNetFromBuffer(buf : bytes, framework : str = "onnx"):
         '''
         Create an OpenCV Net object from the model data provided and the framework to use.
         Currently OpenCV does not support loading from buffer using 'cv2.readNet' for some types,
         so this is a replacement for that.
         '''
+        import cv2
         fw_net_map = {
             'onnx': cv2.dnn.readNetFromONNX
         }

@@ -11,9 +11,9 @@ import pickle
 from uuid import uuid4
 
 def boxSortCentroidReadingOrder(boxes : np.ndarray) -> np.ndarray:
+    if boxes is None or len(boxes) == 0: return boxes
+
     boxes = np.array(boxes)
-    
-    if len(boxes) == 0: return boxes
 
     #Normalize
     boxes_norm = boxes-np.min(boxes,axis=(0,1))
@@ -28,7 +28,8 @@ def boxSortCentroidReadingOrder(boxes : np.ndarray) -> np.ndarray:
 def recognize(img : np.ndarray, plate_detect_model, text_detect_model, ocr_model) -> typing.Tuple[typing.List[str], float]:
     #Stage 1: Detect license plate
     res = plate_detect_model.detect(img)
-    
+    res = list(zip(*res))
+
     if len(res) == 0:
         return None, 0.0 #No plates detected
 
@@ -47,8 +48,12 @@ def recognize(img : np.ndarray, plate_detect_model, text_detect_model, ocr_model
     img_cropped = img[pt1[1]:pt2[1],pt1[0]:pt2[0]]
     
     boxes = text_detect_model.detect(img_cropped)
+
+    if boxes is None:
+        return None, conf #Detect error
+
     boxes = boxSortCentroidReadingOrder(boxes)
-    
+
     #pickle.dump((img_cropped, boxes), open("img_boxes_%s.pkl" % uuid4().hex, "wb"))
     
     #cv2.imshow("Img plate", img_cropped)

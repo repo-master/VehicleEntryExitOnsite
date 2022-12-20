@@ -23,8 +23,6 @@ from .routes import init_routes
 
 root_logger : logging.Logger = init_root_logger()
 
-CFG_FILE = deconf('CONFIG', default='config.yaml')
-
 async def VehicleVision(loop : asyncio.AbstractEventLoop = None, debug : bool = False):
     '''Server application entry'''
     if loop is None:
@@ -36,8 +34,11 @@ async def VehicleVision(loop : asyncio.AbstractEventLoop = None, debug : bool = 
 
     loop.set_exception_handler(aio_exc_hdl)
 
+    #Config data
+    CFG_FILE = deconf('CONFIG', default='config.yaml')
+
     #Load configuration data
-    root_logger.info("Loading configuration file...")
+    root_logger.info("Loading configuration file from '%s'...", CFG_FILE)
     cfg = load_config(CFG_FILE)
 
     #Set-up the logger from config
