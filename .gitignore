@@ -155,7 +155,7 @@ cython_debug/
 # Visual Studio
 .vs/
 *.user
-
+.vscode/
 
 results/
 media/

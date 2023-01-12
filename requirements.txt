@@ -10,7 +10,7 @@ aiosignal
 async-timeout
 python-decouple
 PyYAML
-aiomultiprocess
+aioprocessing
 
 #Vision/tracking (Do NOT install opencv-python)
 opencv-contrib-python

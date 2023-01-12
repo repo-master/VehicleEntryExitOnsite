@@ -33,7 +33,7 @@ app:
           #Hint at what type of camera is being pointed
           kind: media
           #Which camera device to use (index, path or url of stream)
-          src: 0
+          src: media/IMG_4081.MOV
           #Skip beginning x number of frames in case there is no activity there
           skip_frames: 0
           #Slow down footage (frame rate cap) to make demo easier to view
@@ -51,37 +51,33 @@ app:
   #any processing task, such as vehicle tracking, communication
   tasks:
     camera_source:
-      type: CameraSource
+      type: vehiclebot.components.camera.CameraSource
       properties:
         <<: *primary_camera
 
     vehicle_tracker:
-      type: ObjectTracker
+      type: vehiclebot.components.tracker.ObjectTracker
       properties:
         input_source: camera_source
-        output: vidstream_main
-        detection_output: vehicle_manager
-
-        #How many frames to pass to tracker per second
-        update_rate: 30
+        track_output: vehicle_manager
 
         #ROI tracker configuration
         tracker:
           # Check out the 'motrackers' library to find out which trackers are supported
-          type: SORT
-          #Number of detection frames till lost
+          type: CentroidTracker
+          # Number of detection frames till lost
           max_lost: 10
-          iou_threshold: 0.55
-          #Steady update rate
+          # iou_threshold: 0.55
+          # Steady update rate
           update_rate: 60
         
-    #Sends detections found in the video input to the tracker
+    # Sends detections found in the video input to the tracker
     vehicle_detector:
-      type: RemoteObjectDetector
+      type: vehiclebot.components.detector.RemoteObjectDetector
       properties:
         input_source: camera_source
         #Which detection model to use
-        model: vehicle_yolov5
+        model: vehicle_plate_yolov5
         output: vehicle_tracker
         #Lower resolutions will be faster to process (less bandwidth) but will have less precision
         #and accuracy than full-size frame. Size of 640 is default (YOLOv5 frame size)
@@ -91,23 +87,24 @@ app:
         #Endpoint of the server API to use for detection
         #server_endpoint: !env MODEL_SERVER
         server_endpoint: http://localhost:5000/
+        update_rate: 1
 
-    license_plate_decoder:
-      type: vehiclebot.components.plate.PlateRecognizer
-      properties:
-        #Endpoint of the server API to use for plate recognition
-        #server_endpoint: !env MODEL_SERVER
-        server_endpoint: http://localhost:5000/
+    # license_plate_decoder:
+    #   type: vehiclebot.components.plate.PlateRecognizer
+    #   properties:
+    #     #Endpoint of the server API to use for plate recognition
+    #     #server_endpoint: !env MODEL_SERVER
+    #     server_endpoint: http://localhost:5000/
 
-    #To gather all detections, associate them with a vehicle number and generate entry/exit timestamps
+    # #To gather all detections, associate them with a vehicle number and generate entry/exit timestamps
     vehicle_manager:
-      type: vehiclebot.components.rtc.rtcprocess.RTCDataProcess
+      type: vehiclebot.components.manager.VehicleManager
       properties:
-        plate_decoder: license_plate_decoder
+         
 
-    #RTC stream tracks
+    # #RTC stream tracks
     vidstream_main:
-      type: RTCStreamTrack
+      type: vehiclebot.components.rtc.rtcstream.RTCStreamTrack
 
   #Management web server. Uncomment to enable
   management:

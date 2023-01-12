@@ -12,6 +12,8 @@ import humanize
 import json
 import datetime
 from collections.abc import Iterable
+import platform
+from contextlib import suppress
 
 class JSONifier(json.JSONEncoder):
     def default(self, obj):
@@ -27,18 +29,13 @@ class JSONifier(json.JSONEncoder):
     
 
 async def _e_waitfor_stub(self, timeout=None):
-    try:
+    with suppress(asyncio.TimeoutError):
         await asyncio.wait_for(self.wait(), timeout)
-    except asyncio.TimeoutError:
-        pass
-    finally:
-        return self.is_set()
+    return self.is_set()
 
 async def _q_get_waitfor_stub(self, timeout=None):
-    try:
-        return await(await asyncio.wait_for(self.get(), timeout))
-    except asyncio.TimeoutError:
-        pass
+    with suppress(asyncio.TimeoutError):
+        return await asyncio.wait_for(self.get(), timeout)
 
 def asyncio_monkey_patch():
     setattr(asyncio.Event, 'wait_for', _e_waitfor_stub)
@@ -63,3 +60,7 @@ def aiortc_monkey_patch():
 
 def aiohttp_monkey_patch():
     patch_aiohttp_json_response()
+
+def patch_asyncio_platform_loop_policy():
+    if platform.system() == 'Windows':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

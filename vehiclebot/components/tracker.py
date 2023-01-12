@@ -5,7 +5,7 @@ from ..multitask import AsyncProcess
 from .camera import CameraSource
 from ..types import Detections
 
-from ..tracker import Trajectory, Tracker, motrackers, TRACK_COLORS
+from ..tracker import Trajectory, Tracker, Track, motrackers, TRACK_COLORS
 
 from ..imutils import cropImage, scaleImgRes
 
@@ -17,6 +17,7 @@ import asyncio
 import threading
 import collections
 from datetime import datetime, timedelta
+from contextlib import suppress
 
 import numpy as np
 
@@ -129,7 +130,11 @@ class TrackerProcess(threading.Thread):
             tracker_output_format='mot_challenge',
             **tracker_config
         )
-        
+
+        self._track_only_classes : typing.List = tracker_config.pop('track_classes')
+        if self._track_only_classes is not None and not isinstance(self._track_only_classes, typing.Iterable):
+            self._track_only_classes = [self._track_only_classes]
+
         self._feature_tracker = FeatureTracker(self.tracker)
         #Trajectory estimator (direction, speed, etc.)
         self._trajectory = Trajectory(self.tracker)
@@ -137,8 +142,6 @@ class TrackerProcess(threading.Thread):
         self._stopEv = threading.Event()
         self._detections : queue.Queue[typing.Tuple[Detections, np.ndarray, float]] = queue.Queue(maxsize=10)
         self._trackresults : typing.Deque[typing.Dict] = collections.deque(maxlen=200)
-
-        self._aa = []
 
         #Start thread
         self.start()
@@ -149,8 +152,6 @@ class TrackerProcess(threading.Thread):
 
     def cleanup(self):
         pass
-        #print("Saving recording...", flush=True)
-        #pickle.dump(self._aa, open("unneeded/test8.pkl", "wb"))
 
     def run(self):
         if self._update_rate is None:
@@ -167,8 +168,8 @@ class TrackerProcess(threading.Thread):
                 pass
                 
             #Update tracker that moves the tracks using the detected feature
-            self._feature_tracker()
-            self._trajectory(self._feature_tracker.getBBox)
+            #self._feature_tracker()
+            self._trajectory(None)#self._feature_tracker.getBBox)
             
             next_time += (1.0 / self._update_rate)
             delaySleep = next_time - time.time()
@@ -181,7 +182,7 @@ class TrackerProcess(threading.Thread):
     def _updateTracker(self, dets : Detections, frame : np.ndarray, scale : float):
         self.tracker.update(*dets)
         self._updateTrackerStats(scale)
-        self._feature_tracker.updateDetection(frame)
+        #self._feature_tracker.updateDetection(frame)
         self._updateResults(frame, scale)
         
     def _updateTrackerStats(self, scale : float):
@@ -201,15 +202,10 @@ class TrackerProcess(threading.Thread):
 
             #Extract all information needed
             trk_id = trk[1]
-            is_lost = trk_obj.lost>0
             xmin, ymin, width, height = trk[2:6]
-            trk_color = TRACK_COLORS[
-                -1 if is_lost else
-                (trk_id % (len(TRACK_COLORS)-1))
-            ]
             conf : float = trk[6]
             class_id : int = trk_obj.class_id
-            
+
             detect_ts, update_ts = None, None
             traj_dir_angle = None
             traj_dir_mv = None
@@ -242,7 +238,7 @@ class TrackerProcess(threading.Thread):
 
             #TODO: Class Object
             res_item = {
-                'track_id': 1,#trk_id,
+                'track_id': trk_id,
                 'age': trk_obj.age,
                 'lost_for_frames': trk_obj.lost,
                 'img': img_crop,
@@ -261,7 +257,6 @@ class TrackerProcess(threading.Thread):
             results.append(res_item)
 
         self._trackresults.append(results)
-        self._aa.append((frame.copy(), results))
 
     #Public methods
 
@@ -271,6 +266,10 @@ class TrackerProcess(threading.Thread):
         
     def updateDetection(self, detection : Detections, frame : np.ndarray, scale : float):
         '''Add new detection to queue for processing'''
+        #NEW [also FIXME]: Filter detection by ID to only track plate
+        if self._track_only_classes is not None:
+            selected_ids = np.isin(detection.class_ids, self._track_only_classes)
+            detection = Detections(*(x[selected_ids] for x in detection))
         self._detections.put((detection, frame, scale))
         
     def drawTrackBBoxes(self, img : np.ndarray) -> np.ndarray:
@@ -319,7 +318,7 @@ class TrackerProcess(threading.Thread):
             if can_draw_lost or (not can_draw_lost and not is_lost):
                 if ft_box is not None:
                     cv2.rectangle(img, *ft_box, trk_color, 2)
-                #cv2.rectangle(img, (xmin, ymin), (xmin+width, ymin+height), trk_color, 2)
+                cv2.rectangle(img, (xmin, ymin), (xmin+width, ymin+height), trk_color, 2)
 
             #Class and confidence
             txt_pos = [xmin, ymin]
@@ -346,35 +345,204 @@ class TrackerProcess(threading.Thread):
                 break
         return res
 
-class ObjectTracker(AIOTask, AsyncProcess):
+
+import multiprocessing as mp
+import aioprocessing as amp
+
+class AsyncObjectTrackerProcess(mp.Process):
+    def __init__(self, mot_params : dict, **kwargs):
+        super().__init__()
+        #How often to update the tracker
+        self._update_rate : float = mot_params.pop('update_rate', 10.0)
+        self._track_only_classes = [1]
+
+        #Load tracker
+        _tracker_type = mot_params.pop('type')
+        #Get class of the tracker we want to use from the motrackers module
+        tracker_cls : typing.Type[Tracker] = getattr(motrackers, _tracker_type) #Throws AttributeError if invalid
+        if not issubclass(tracker_cls, Tracker):
+            raise ValueError("Tracker type '%s' is not a valid tracker!" % str(_tracker_type))
+
+        self.tracker : Tracker = tracker_cls(
+            tracker_output_format='mot_challenge',
+            **mot_params
+        )
+
+        self._stopEv : amp.Event = amp.AioEvent(context=mp.get_context())
+        self._detections : amp.Queue[typing.Tuple[Detections, np.ndarray, float]] = amp.AioQueue(maxsize=10, context=mp.get_context())
+        self._detectionQueue : amp.Queue[typing.OrderedDict] = amp.AioQueue(maxsize = 0, context=mp.get_context())
+
+
+    #==== Process realm ====
+
+    def run(self):
+        import signal
+        #Ignore SIGINT (KeyboardInterrupt)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+        next_time = time.time()
+        delaySleep = 0
+        while not self._stopEv.wait(timeout=delaySleep):
+            try:
+                #Any new detections?
+                #Update trackers and predict new (estimated) position
+                self._updateTracker(*self._detections.get_nowait())
+            except queue.Empty:
+                pass
+
+            next_time += (1.0 / self._update_rate)
+            delaySleep = next_time - time.time()
+            if delaySleep < 0:
+                delaySleep = 0
+                next_time = time.time()
+
+    def _updateTracker(self, dets : Detections, frame : np.ndarray, scale : float):
+        self.tracker.update(*dets)
+        self._updateTrackerStats(scale)
+        #self._feature_tracker.updateDetection(frame)
+        self._updateResults(frame, scale)
+
+        with suppress(queue.Full):
+            self._detectionQueue.put_nowait(self.tracker.tracks)
+
+    def _updateTrackerStats(self, scale : float):
+        setattr(self.tracker, '_scale', scale)
+        for trk_obj in self.tracker.tracks.values():
+            setattr(trk_obj, '_update_ts', datetime.now())
+            if trk_obj.age == 1:
+                setattr(trk_obj, '_create_ts', trk_obj._update_ts)
+                
+    def _updateResults(self, frame : np.ndarray, scale : float):
+        inv_scale = 1/scale
+        #_trj_id = self._trajectory.trackerID()
+        for trk_obj in self.tracker.tracks.values():
+            trk = trk_obj.output()
+            #trj_obj = getattr(trk_obj, _trj_id, None)
+
+            #Extract all information needed
+            trk_id = trk[1]
+            xmin, ymin, width, height = trk[2:6]
+            conf : float = trk[6]
+            class_id : int = trk_obj.class_id
+
+            '''
+            detect_ts, update_ts = None, None
+            traj_dir_angle = None
+            traj_dir_mv = None
+            traj_mv_spd = None
+            traj_is_mv = None
+            traj_pos = None
+            
+            if hasattr(trk_obj, '_create_ts'):
+                detect_ts = trk_obj._create_ts
+            if hasattr(trk_obj, '_update_ts'):
+                update_ts = trk_obj._update_ts
+            if trj_obj is not None:
+                traj_dir_angle = trj_obj['dir']
+                traj_dir_mv = trj_obj['cardinal']
+                traj_mv_spd = trj_obj['speed']
+                traj_is_mv = trj_obj['is_moving']
+                traj_pos = np.array(trj_obj['curr_pos'])*inv_scale
+            '''
+            #Calculate centroid of current detection
+            xcentroid, ycentroid = xmin + 0.5*width, ymin + 0.5*height
+
+            #Integer for cropping
+            xmin, ymin, width, height = int(xmin*inv_scale), int(ymin*inv_scale), int(width*inv_scale), int(height*inv_scale)
+            xcentroid, ycentroid = int(xcentroid*inv_scale), int(ycentroid*inv_scale)
+            
+            img_crop = cropImage(frame, xmin, ymin, xmin+width, ymin+height)
+            if img_crop.shape[0]*img_crop.shape[1] > 0:
+                setattr(trk_obj, 'latest_frame', img_crop)
+
+            #TODO: Class Object
+            '''res_item = {
+                'track_id': trk_id,
+                'age': trk_obj.age,
+                'lost_for_frames': trk_obj.lost,
+                'img': img_crop,
+                'detection_class': (class_id, conf),
+                'is_new_detection': trk_obj.age == 1,
+                'bbox': (xmin, ymin, width, height),
+                'first_detect_ts': detect_ts,
+                'last_update_ts': update_ts,
+                'movement_speed': traj_mv_spd,
+                'is_moving': traj_is_mv,
+                'track_pos': traj_pos,
+                'centroid_pos': (xcentroid, ycentroid),
+                'estimated_movement_angle': traj_dir_angle,
+                'estimated_movement_direction': traj_dir_mv
+            }'''
+
+
+    # === End process realm ===
+
+
+    #Async interface
+
+    async def safeShutdown(self, timeout : float = 10):
+        self._stopEv.set()
+
+        # N.B. Not using AioProcess as it is very difficult to subclass it, so manually perform shutdown
+        await asyncio.get_event_loop().run_in_executor(None, self.join, timeout)
+        if self.is_alive():
+            await asyncio.get_event_loop().run_in_executor(None, self.terminate)
+        await asyncio.get_event_loop().run_in_executor(None, self.close)
+
+    async def updateDetection(self, detection : Detections, frame : np.ndarray, scale : float):
+        '''Add new detection to queue for processing'''
+        #NEW [also FIXME]: Filter detection by ID to only track plate
+        if self._track_only_classes is not None:
+            ## N.B.: Always run CPU-bound tasks in an executor
+            selected_ids = await asyncio.get_event_loop().run_in_executor(None, np.isin, detection.class_ids, self._track_only_classes)
+            detection = Detections(*(x[selected_ids] for x in detection))
+        await self._detections.coro_put((detection, frame, scale))
+
+    async def tracksUpdated(self):
+        while not self._stopEv.is_set():
+            with suppress(queue.Empty):
+                yield await self._detectionQueue.coro_get(block=True, timeout=1.0)
+
+
+class ObjectTracker(AIOTask):
     def __init__(self, tm, task_name,
                  input_source : str,
                  tracker: typing.Dict,
                  output : TaskOrTasks = None,
-                 detection_output : TaskOrTasks = None,
-                 update_rate : float = 10.0,
+                 track_output : TaskOrTasks = None,
                  **kwargs):
         super().__init__(tm, task_name, **kwargs)
         self.inp_src = input_source
         self.output_dest = output
-        self._update_rate = update_rate
         self.tracker_params = tracker
-        self.detection_output = detection_output
+        self.track_output_to_tasks = track_output
 
-        self.tracker : TrackerProcess = None
-        self._stopEv = asyncio.Event()
+        self._long_running_tasks = []
+
+        if self.tracker_params is None:
+            self.logger.warning("Field 'tracker' is not given in the config for %s. Using default settings for the MOT" % self.name)
+            self.tracker_params = {}
+
+        self.tracker = AsyncObjectTrackerProcess(self.tracker_params)
         self.logger.info("Started Tracker task")
         
     async def start_task(self):
-        await self._initEvents()
-        await self.prepareProcess()
-        try:
-            self.tracker = await self.asyncCreate(TrackerProcess, self.tracker_params)
-        except (FileNotFoundError, AttributeError, ValueError):
-            self.logger.exception("Error loading detection model")
-            
+        await asyncio.get_event_loop().run_in_executor(None, self.tracker.start)
+        self._long_running_tasks.append(asyncio.create_task(self.tracksProcessor()))
+
     async def stop_task(self):
-        self._stopEv.set()
+        #Shut down long-running (polling) tasks
+        self.logger.info("Closing long-running subtasks...")
+        tasks = asyncio.gather(*self._long_running_tasks)
+        tasks.cancel()
+
+        self.logger.debug("Waiting for tracker process to close...")
+        await self.tracker.safeShutdown()
+        self.logger.debug("Tracker process closed")
+        #Tasks will be cancelled so ignore cancelled exception and wait for them to close
+        #This is done here as some tasks may rely on the stopEv
+        with suppress(asyncio.CancelledError):
+            await tasks
         await self.wait_task_timeout(timeout=3.0)
 
     async def __call__(self):
@@ -384,42 +552,31 @@ class ObjectTracker(AIOTask, AsyncProcess):
             self.logger.error("Input source component \"%s\" is not loaded. Please check your config file to make sure it is properly configured." % self.inp_src)
             return
         
-        if self._update_rate is None:
-            self._update_rate = 60
+        capTask.on('frame', self.processFrame)
+        self.on('detect', self.updateDetection)
 
-        next_time = time.time()
-        delaySleep = 0
-        #Update tracker frame at a steady rate
-
-        #TODO: Not needed, make the camera directly send frames to process on events
-        while not await self._stopEv.wait_for(delaySleep):
-            img = await capTask.frame()
-            if img is not None:
-                await self.tracker.updateVideoFrame(img)
-                img = await self.tracker.drawTrackBBoxes(img)
-                await self.tm.emit(self.output_dest, "frame", "Tracker", img)
-                
-            dets_task = self.tracker.getTracks()
+    async def tracksProcessor(self):
+        '''
+        Task to get current tracks as they get updated, and send the current tracks to another task
+        '''
+        async for tracks in self.tracker.tracksUpdated():
             await self.tm.emit(
-                self.detection_output,
-                "detection", dets_task
+                self.track_output_to_tasks,
+                "track",
+                tracks
             )
 
-            next_time += (1.0 / self._update_rate)
-            delaySleep = next_time - time.time()
-            if delaySleep < 0:
-                delaySleep = 0
-                next_time = time.time()
-
-        await self.tracker.stop()
-
-    #Event handlers
-    async def _initEvents(self):
-        self.on('detect', self.updateDetection)
-        
-
     #Input methods
+    async def processFrame(self, img):
+        if img is not None:
+            pass
+            #await self.tracker.updateVideoFrame(img)
+
     async def updateDetection(self, detection : Detections, frame : np.ndarray, scale : float = 1.0):
         '''Update the tracker with new set of detections'''
         if self.tracker is None: return
-        await self.tracker.updateDetection(detection, frame, scale)
+        try:
+            await asyncio.wait_for(self.tracker.updateDetection(detection, frame, scale), timeout = 2.0)
+        except asyncio.TimeoutError:
+            #Skip this detection, as queue is full or not ready
+            pass

@@ -22,8 +22,6 @@ class TaskManager(object):
         self.app = app
         self.logger = logging.getLogger(__name__)
         self.tasks : Dict[str, AIOTask] = dict()
-        self.pool : Executor = ThreadPoolExecutor(max_workers=4)
-        self.logger.info("Started ThreadPoolExecutor with %d threads" % self.pool._max_workers)
         
     def _handle_task_done(self, cor : asyncio.Task):
         res = cor.result()
@@ -78,7 +76,8 @@ class TaskManager(object):
         task_list = [self.shutdown_task(k) for k in self.tasks.keys()]
         with logging_redirect_tqdm():
             await tqdm.asyncio.tqdm.gather(*task_list)
-        self.pool.shutdown()
+
+        self.logger.info("Task shutdown complete")
 
         #Find all active tasks and shut them down
         pending = asyncio.all_tasks()
@@ -96,7 +95,7 @@ class TaskManager(object):
             try:
                 task_obj = self[task]
             except KeyError:
-                self.logger.warning("Task '%s' not found", task)
+                #self.logger.warning("Task '%s' not found", task)
                 return False
         return task_obj.emit(event, *args, **kwargs)
 

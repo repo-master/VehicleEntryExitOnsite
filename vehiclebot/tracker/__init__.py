@@ -1,6 +1,6 @@
 
 import motrackers
-from motrackers.tracker import Tracker
+from motrackers.tracker import Tracker, Track
 
 from .trajectory import (
     Trajectory,

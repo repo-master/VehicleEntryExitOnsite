@@ -5,12 +5,14 @@ import asyncio
 
 from vehiclebot.patches import (
     asyncio_monkey_patch,
-    aiortc_monkey_patch
+    aiortc_monkey_patch,
+    patch_asyncio_platform_loop_policy
 )
 
 #Apply patches to methods to add more functions
 asyncio_monkey_patch()
 aiortc_monkey_patch()
+patch_asyncio_platform_loop_policy()
 
 from decouple import config as deconf
 from aiohttp.web import Application

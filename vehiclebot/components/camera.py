@@ -1,6 +1,5 @@
 
 from vehiclebot.task import AIOTask, TaskOrTasks
-from vehiclebot.multitask import AsyncProcess
 from vehiclebot.imutils import scaleImgRes
 
 import time
@@ -11,8 +10,6 @@ import typing
 import cv2
 import numpy as np
 
-#Synchronous code in isolated process
-#This is needed because OpenCV function calls are not async
 class CameraSourceProcess(threading.Thread):
     def __init__(self, exception_mode : bool = False):
         super().__init__(daemon=True)
@@ -20,6 +17,7 @@ class CameraSourceProcess(threading.Thread):
         self._frame : np.ndarray = None
         self._enableCapture = False
         self._update_rate : float = 1000
+        self._callbacks = []
 
         self.cap = cv2.VideoCapture()
         self.setExceptionMode(exception_mode)
@@ -41,6 +39,8 @@ class CameraSourceProcess(threading.Thread):
                 ret, frame = self.read_frame()
                 if ret:
                     self._frame = frame#cv2.rotate(frame, cv2.ROTATE_180)#cv2.resize(frame, (1920, 1080))
+                    for cb in self._callbacks:
+                        cb(self._frame)
 
             next_time += (1.0 / self._update_rate)
             delaySleep = next_time - time.time()
@@ -83,8 +83,11 @@ class CameraSourceProcess(threading.Thread):
     
     def frame(self) -> np.ndarray:
         return self._frame
+    
+    def putCallback(self, cb : typing.Callable):
+        self._callbacks.append(cb)
 
-class CameraSource(AIOTask, AsyncProcess):
+class CameraSource(AIOTask):
     def __init__(self,
                  tm,
                  task_name,
@@ -100,36 +103,53 @@ class CameraSource(AIOTask, AsyncProcess):
         self.video_output = output
         self.throttle_fps = throttle_fps
 
-        self.cap : CameraSourceProcess = None
+        self.cap = None
         self._latest_frame : np.ndarray = None
 
-        self._stop = asyncio.Event()
+        self._stopEv = asyncio.Event()
+        self._frame_ready = asyncio.Event()
     
+    def _cb_frame_ready(self, frame):
+        self._latest_frame = frame
+        self._frame_ready.set()
+
     async def start_task(self):
-        await self.prepareProcess()
-        self.cap = await self.asyncCreate(CameraSourceProcess)
+        self.cap = CameraSourceProcess()
+        self.cap.putCallback(self._cb_frame_ready)
 
     async def stop_task(self):
         self.logger.info("Stopping video capture...")
-        await self.wait_task_timeout(timeout=5.0)
+        self._stopEv.set()
+        self._frame_ready.set() #Notify
 
         if self.cap is not None:
-            await self.cap.stop_capture()
-            await self.cap.close()
+            self.cap.stop_capture()
+            await asyncio.get_event_loop().run_in_executor(None, self.cap.stop)
+            await asyncio.get_event_loop().run_in_executor(None, self.cap.close)
 
-        await self.endProcess()
+        await self.wait_task_timeout(timeout=5.0)
 
     async def __call__(self):
         if self.cap is None:
             return
         
         self.logger.info("Starting video capture of source '%s'" % self.source)
-        ret = await self.cap.open(self.source, self.throttle_fps)
+        ret = await asyncio.get_event_loop().run_in_executor(None, self.cap.open, self.source, self.throttle_fps)
         if not ret:
             self.logger.error("Capture could not be created at source '%s':" % self.source)
-            
-        await self.cap.skip_frames(self._skipframes)
-        await self.cap.start_capture()
+
+        #Skip frames (optionally)
+        await asyncio.get_event_loop().run_in_executor(None, self.cap.skip_frames, self._skipframes)
+
+        self.cap.start_capture()
+
+        while True:
+            is_frame_ready = await self._frame_ready.wait_for(timeout=0.1)
+            if is_frame_ready:
+                self.emit("frame", self._latest_frame)
+                self._frame_ready.clear()
+            if self._stopEv.is_set():
+                break
         
-    def frame(self) -> asyncio.Future[np.ndarray]:
+    def frame(self) -> np.ndarray:
         return self.cap.frame()

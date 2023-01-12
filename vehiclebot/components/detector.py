@@ -22,6 +22,7 @@ class RemoteObjectDetector(AIOTask):
                  process_size : int = None,
                  img_format : str = ".png",
                  server_endpoint : str = None,
+                 update_rate : float = None,
                  **kwargs):
         super().__init__(tm, task_name, **kwargs)
         self.inp_src = input_source
@@ -30,7 +31,9 @@ class RemoteObjectDetector(AIOTask):
         self.img_encode_format = img_format
         self._process_size = process_size
         
-        self._update_rate = 10
+        self._update_rate = update_rate
+        if self._update_rate is None:
+            self._update_rate = 10
         self._can_detect_after = time.time()
 
         self._detect_endpoint = "/detect"
@@ -60,19 +63,20 @@ class RemoteObjectDetector(AIOTask):
         except KeyError:
             self.logger.error("Input source component \"%s\" is not loaded. Please check your config file to make sure it is properly configured." % self.inp_src)
             return
-        
+
         next_time = time.time()
         delaySleep = 0
         while not await self._stopEv.wait_for(min(delaySleep, 1/100)): #Do not exceed 100 reqs/s
             if time.time() > self._can_detect_after:
                 #Try to grab a frame from video source
-                img = await capTask.frame()
+                img = capTask.frame()
                 if img is not None:
                     if self._process_size is not None:
                         img_proc, scale = scaleImgRes(img, height=self._process_size)
                     else:
                         img_proc = img
                         scale = 1.0
+
                     det = await self.detect(img_proc)
                     if det:
                         await self.tm.emit(
@@ -89,7 +93,8 @@ class RemoteObjectDetector(AIOTask):
     async def detect(self, img : np.ndarray) -> Detections:
         if img is None: return
         encode_mime = mimetypes.types_map.get(self.img_encode_format)
-        ret, img_blob = cv2.imencode(self.img_encode_format, img)
+        #Run synchronous task in thread pool
+        ret, img_blob = await asyncio.get_event_loop().run_in_executor(None, cv2.imencode, self.img_encode_format, img)
         if not ret: return
         #Send image to the model
         try:
