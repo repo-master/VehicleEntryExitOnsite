@@ -61,7 +61,7 @@ app:
         input_source: camera_source
         track_output: vehicle_manager
 
-        #ROI tracker configuration
+        # ROI tracker configuration
         tracker:
           # Check out the 'motrackers' library to find out which trackers are supported
           type: CentroidTracker
@@ -82,35 +82,24 @@ app:
         #Lower resolutions will be faster to process (less bandwidth) but will have less precision
         #and accuracy than full-size frame. Size of 640 is default (YOLOv5 frame size)
         process_size: 360
-        #Image encoding
-        img_format: .png
-        #Endpoint of the server API to use for detection
-        #server_endpoint: !env MODEL_SERVER
-        server_endpoint: http://localhost:5000/
         update_rate: 1
 
-    # license_plate_decoder:
-    #   type: vehiclebot.components.plate.PlateRecognizer
-    #   properties:
-    #     #Endpoint of the server API to use for plate recognition
-    #     #server_endpoint: !env MODEL_SERVER
-    #     server_endpoint: http://localhost:5000/
-
-    # #To gather all detections, associate them with a vehicle number and generate entry/exit timestamps
+    # To gather all detections, associate them with a vehicle number and generate entry/exit timestamps
     vehicle_manager:
       type: vehiclebot.components.manager.VehicleManager
       properties:
          
 
-    # #RTC stream tracks
+    # RTC stream tracks
     vidstream_main:
       type: vehiclebot.components.rtc.rtcstream.RTCStreamTrack
 
-  #Management web server. Uncomment to enable
+
+  # Management web server. Uncomment to enable
   management:
     app_name: VHawk
     
-  #Admin backend (unfinished). Uncomment to enable
+  # Admin backend (unfinished). Uncomment to enable
   admin:
     
   #Integrated model server (run along with main app on startup). Uncomment to enable
@@ -126,6 +115,9 @@ logger:
     handlers:
       #- log_file
       - console
+  loggers:
+    aiohttp:
+      level: WARNING
   handlers:
     log_file:
       class: logging.handlers.RotatingFileHandler

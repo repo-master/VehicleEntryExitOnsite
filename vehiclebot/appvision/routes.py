@@ -20,18 +20,24 @@ from ..model.ocr import OCRModelTransformers
 from ..model.craft import CRAFTModel
 from ..log import init_root_logger
 
-VEHICLE_DETECT_MODEL_FILE = "models/yolov5-vehicle-best.pt"
+HF_MODEL_CACHEDIR = "models/.transformer-cache/"
+
+VEHICLE_DETECT_MODEL_FILE = "models/external/yolov5-vehicle-best.pt"
+VEHICLE_PLATE_DETECT_MODEL_FILE = "models/crossml/vehicle-and-plate-best.pt"
+
 PLATE_DETECT_MODEL_FILE = "nickmuchi/yolos-small-finetuned-license-plate-detection"
 PLATE_DECODE_MODEL_FILE = "microsoft/trocr-small-printed"
 TEXT_DETECT_MODEL_FILE = "models/craft_mlt_25k.pth"
 
-#Auto-detect device to use
+#Auto-detect device to use. Put 'cpu' or 'cuda' (or cuda:0, etc.) to force a device
 DEVICE = None
 
 MODEL_LOADERS = {
     'vehicle_yolov5': (YOLOModelYOLOv5.fromPT, (VEHICLE_DETECT_MODEL_FILE,), dict(device=DEVICE)),
-    'plate_detect_hf_yolos': (YOLOModelTransformers.fromHuggingFace, (PLATE_DETECT_MODEL_FILE,), dict(cache_dir="models/.transformer-cache/", device=DEVICE)),
-    'plate_decode_hf_trocr': (OCRModelTransformers.fromHuggingFace, (PLATE_DECODE_MODEL_FILE,), dict(cache_dir="models/.transformer-cache/", device=DEVICE)),
+    'vehicle_plate_yolov5': (YOLOModelYOLOv5.fromPT, (VEHICLE_PLATE_DETECT_MODEL_FILE,), dict(device=DEVICE)),
+
+    'plate_detect_hf_yolos': (YOLOModelTransformers.fromHuggingFace, (PLATE_DETECT_MODEL_FILE,), dict(cache_dir=HF_MODEL_CACHEDIR, device=DEVICE)),
+    'plate_decode_hf_trocr': (OCRModelTransformers.fromHuggingFace, (PLATE_DECODE_MODEL_FILE,), dict(cache_dir=HF_MODEL_CACHEDIR, device=DEVICE)),
     'text_detect_pt_craft': (CRAFTModel.fromCRAFT, (TEXT_DETECT_MODEL_FILE,), dict(device=DEVICE))
 }
 
@@ -64,15 +70,13 @@ def detect_task(img_buf, model_detector):
     model = get_model(model_detector)
     return model.detect(decode_image(img_buf), min_confidence=0.25)
 
-def recognize_task(img_buf, detect_model, text_detect_model, ocr_model):
-    importlib.reload(recognition)
-    detect_model_o = get_model(detect_model)
+def recognize_task(img_buf, text_detect_model, ocr_model):
+    #importlib.reload(recognition)
     text_detect_model_o = get_model(text_detect_model)
     ocr_model_o = get_model(ocr_model)
     return recognition.parse(
-        *recognition.recognize(
+        recognition.recognize(
             decode_image(img_buf),
-            detect_model_o,
             text_detect_model_o,
             ocr_model_o
         )
@@ -105,7 +109,6 @@ async def recognize(req : web.Request) -> web.Response:
             req.app['pool'],
             recognize_task,
             await req.content.read(),
-            'plate_detect_hf_yolos',
             'text_detect_pt_craft',
             'plate_decode_hf_trocr'
         )

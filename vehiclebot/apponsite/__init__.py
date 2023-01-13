@@ -21,6 +21,7 @@ from aiohttp.client import ClientSession
 from vehiclebot.config import load_config
 from vehiclebot.log import init_root_logger, aio_exc_hdl
 from vehiclebot.taskmanager import TaskManager
+from vehiclebot.model.executor import RemoteModelExecutor
 from vehiclebot.management import init_routes
 
 root_logger : logging.Logger = init_root_logger()
@@ -80,7 +81,10 @@ async def VehicleEntryExitOnSite(loop : asyncio.AbstractEventLoop = None, debug 
     app = Application(loop=loop)
     app['cfg'] = cfg.get('app', {})
     root_logger.debug("AIO application created")
-    
+
+    #Model executor
+    app['model_executor'] = RemoteModelExecutor(server_endpoint="http://localhost:5000/")
+
     #Management pages
     if "management" in app['cfg']:
         init_routes(app, **(app['cfg'].get('management') or {}))

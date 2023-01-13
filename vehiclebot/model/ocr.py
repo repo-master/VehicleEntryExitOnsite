@@ -25,11 +25,12 @@ class OCRModelTransformers(HFTransformerModel):
             "metadata" : meta
         }
 
-    def detect(self, img : np.ndarray):
+    def detect(self, img : np.ndarray, max_length=12):
         device = self.metadata['device']
 
         #OCR pipeline
-        pixel_values = self.net['processor'](img, return_tensors="pt").pixel_values
-        generated_ids = self.net['decoder'].generate(pixel_values.to(device), max_length=12)
-        return self.net['processor'].batch_decode(generated_ids, skip_special_tokens=True)
+        with torch.no_grad():
+            pixel_values = self.net['processor'](img, return_tensors="pt").pixel_values
+            generated_ids = self.net['decoder'].generate(pixel_values.to(device), max_length=max_length)
+            return self.net['processor'].batch_decode(generated_ids, skip_special_tokens=True)
         

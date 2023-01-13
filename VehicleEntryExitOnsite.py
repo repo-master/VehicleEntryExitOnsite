@@ -7,7 +7,7 @@ import os
 '''
 TODO
 [ ] More models in server: [x] Plate detect, [x] OCR (combine both), [ ] facing side (front/back/none)
-[ ] Make the remote detector use another class as delegate, so that RemoteDetector is
+[x] Make the remote detector use another class as proxy, so that RemoteDetector is
     actually able to use any class to get detection (local or not). It becomes "ObjectDetector"
     and "PlateRecogniser" and they use other class objects such as "RemoteDetector" and "LocalDetector"
 [x] Sort vehicle detections in dashboard most recent on top

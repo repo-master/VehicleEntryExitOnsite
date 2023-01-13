@@ -1,17 +1,15 @@
 
 from collections import OrderedDict
 from vehiclebot.task import AIOTask
-from vehiclebot.management.rtc import DataChannelHandler
 from vehiclebot.tracker import Track
+from vehiclebot.model.executor import ModelExecutor
 
 import asyncio
 import typing
-import numpy as np
 import datetime
 import uuid
 import time
 
-import queue
 import logging
 import threading
 
@@ -25,12 +23,16 @@ class LicensePlate(object):
         return self.plate_number is not None
 
 class Vehicle(object):
-    def __init__(self, track : Track = None, task_loadup : asyncio.Queue = None):
+    def __init__(self, task_executor : ModelExecutor, track : Track = None):
         self.id = uuid.uuid4()
+        self._is_active = True
+        self.logger = logging.getLogger("Vehicle.%s" % self.id.hex[-6:])
+
         self._associated_track : Track = None
         self.license_plate = LicensePlate()
+
         self.associated_track = track
-        self._task_queue = task_loadup
+        self._task_exec = task_executor
         self.issued_tasks = {}
 
     @property
@@ -39,32 +41,39 @@ class Vehicle(object):
     @associated_track.setter
     def associated_track(self, track : Track):
         if track is None:
-            print("Vehicle", self.id.hex, "no longer being tracked")
+            self.logger.info("No longer being tracked")
         elif (self._associated_track is None or self._associated_track.id != track.id):
-            print("Vehicle", self.id.hex, "now focused on track ID", track.id)
+            self.logger.info("Focused on track ID %d", track.id)
 
         self._associated_track = track
 
+    @property
+    def is_active(self):
+        return self._is_active
+
     async def update(self):
-        if self._task_queue is not None:
-            ocr_task = self._ocrImageTask()
-            await asyncio.gather(ocr_task)
+        ocr_task = self._ocrImageTask()
+
+        await asyncio.gather(ocr_task)
 
     async def _ocrImageTask(self):
-        if not self.license_plate.plate_known and self._associated_track is not None and hasattr(self.associated_track, 'latest_frame'):
-            if 'ocr' not in self.issued_tasks:
-                ocr_task = {
-                    "revert_to": self._ocr_done,
-                    "task": {
-                        "type": "ocr",
-                        "data": self.associated_track.latest_frame
-                    }
-                }
-                self.issued_tasks['ocr'] = ocr_task
-                await self._task_queue.put(ocr_task)
+        can_perform_ocr = not self.license_plate.plate_known and self._associated_track is not None and hasattr(self.associated_track, 'latest_frame')
+        should_perform_ocr = 'ocr' not in self.issued_tasks
 
-    async def _ocr_done(self, response):
-        pass
+        if can_perform_ocr and should_perform_ocr:
+            ocr_task = {
+                "task": "ocr",
+                "params": {
+                    "img": self.associated_track.latest_frame
+                }
+            }
+            _exec_task = self._task_exec.run(ocr_task)
+            if _exec_task is not None:
+                self.issued_tasks['ocr'] = _exec_task
+                _exec_task.add_done_callback(self._ocr_done)
+
+    def _ocr_done(self, task : asyncio.Task):
+        print("Task OCR finished:", task.result())
 
     def __eq__(self, other : object):
         if isinstance(other, Vehicle):
@@ -131,22 +140,18 @@ class VehicleManager(AIOTask):
         self._stopEv = asyncio.Event()
         self._all_tracks : typing.OrderedDict[int, Track] = OrderedDict()
         self._all_vehicles : typing.Set[Vehicle] = set()
-        self._tasks = asyncio.Queue()
-
-        self._long_running_tasks = []
+        self._task_exec : ModelExecutor = self.tm.app['model_executor']
 
         self.vmanager = AsyncVehicleManagerThread(self._all_tracks, self._all_vehicles)
 
     async def start_task(self):
         await asyncio.get_event_loop().run_in_executor(None, self.vmanager.start)
-        self._long_running_tasks.append(asyncio.create_task(self.vehicleTaskConsumer()))
 
     async def stop_task(self):
         self._stopEv.set()
         self.logger.debug("Waiting for vehicle manager process to close...")
         await self.vmanager.safeShutdown()
         self.logger.debug("Vehicle manager process closed")
-        await asyncio.gather(*self._long_running_tasks)
         await self.wait_task_timeout(timeout=3.0)
 
     async def handleTracksUpdate(self, tracks : typing.OrderedDict):
@@ -154,13 +159,6 @@ class VehicleManager(AIOTask):
 
     async def __call__(self):
         self.on("track", self.handleTracksUpdate)
-
-    async def vehicleTaskConsumer(self):
-        while not self._stopEv.is_set():
-            task = await self._tasks.get_wait_for(timeout=0.1)
-            if task is not None:
-                print(task)
-                self._tasks.task_done()
 
     async def updateTracks(self, tracks : typing.OrderedDict[int, Track]):
         new_tracks = tracks.keys() - self._all_tracks.keys()
@@ -171,7 +169,7 @@ class VehicleManager(AIOTask):
         for trk in new_tracks:
             self.logger.info("Found new track: %d", trk)
             self._all_tracks[trk] = tracks[trk]
-            self._all_vehicles.add(Vehicle(track=tracks[trk], task_loadup=self._tasks))
+            self._all_vehicles.add(Vehicle(task_executor=self._task_exec, track=tracks[trk]))
         #Update existing tracks
         for trk in updated_tracks:
             self._all_tracks[trk] = tracks[trk]
@@ -188,6 +186,6 @@ class VehicleManager(AIOTask):
             self._all_tracks.pop(trk)
             self.logger.info("Track %d removed", trk)
 
-        await asyncio.gather(*[veh.update() for veh in self._all_vehicles])
-        #print(new_tracks, deleted_tracks, updated_tracks)
+        #Update existing vehicle objects
+        await asyncio.gather(*[veh.update() for veh in self._all_vehicles if veh.is_active])
 
