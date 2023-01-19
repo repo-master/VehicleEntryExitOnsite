@@ -10,13 +10,16 @@ import torch
 
 class OCRModelTransformers(HFTransformerModel):
     @classmethod
-    def _loadTransformer(cls, model_path : str, device : str = None, cache_dir = None) -> dict:
+    def _loadTransformer(cls, model_path : str, processor_path : str = None, device : str = None, cache_dir = None) -> dict:
         meta = {}
         device = TorchModel.getDevice(device)
         meta['device'] = device
 
+        if processor_path is None:
+            processor_path = model_path
+
         net = {
-            'processor': TrOCRProcessor.from_pretrained(model_path, cache_dir=cache_dir),
+            'processor': TrOCRProcessor.from_pretrained(processor_path, cache_dir=cache_dir),
             'decoder': VisionEncoderDecoderModel.from_pretrained(model_path, cache_dir=cache_dir).to(device)
         }
         

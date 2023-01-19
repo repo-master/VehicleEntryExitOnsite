@@ -201,7 +201,7 @@ class YOLOModelTransformers(HFTransformerModel, YOLOModel):
             #Cull low score results
             if score > min_score:
                 confidences.append(score.detach().cpu().numpy())
-                boxes.append(box.detach().cpu().numpy())
+                boxes.append(xyxy2xywh(box.detach().cpu().numpy()))
                 class_ids.append(label.detach().cpu().numpy())
         
         return (

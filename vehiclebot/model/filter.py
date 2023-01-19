@@ -63,14 +63,39 @@ def filter__linear_brightness(img):
     
 #Gamma correction
 
-def filter__gamma_correction(img):
-    gamma = random.uniform(0.0, 3.0)
-    lookUpTable = np.empty((1,256), np.uint8)
-    for i in range(256):
-        lookUpTable[0,i] = np.clip(pow(i / 255.0, gamma) * 255.0, 0, 255)
-    
-    img_original = img.copy()
-    img_processed = cv2.LUT(img_original, lookUpTable)
-    return img_processed
-    
+gamma_lookup = {}
 
+def filter__gamma_correction(img, gamma = 1.8):
+    if gamma not in gamma_lookup:
+        new_lut = np.empty((1,256), np.uint8)
+        for i in range(256):
+            new_lut[0,i] = np.clip(pow(i / 255.0, gamma) * 255.0, 0, 255)
+        gamma_lookup[gamma] = new_lut
+    return cv2.LUT(img, gamma_lookup[gamma])
+
+# can use this kernel as well if required
+kernel_2 = kernel = np.ones((5,5),np.float32)/25
+
+def clahe(img):
+    img_hsv = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
+    h,s,v = cv2.split(img_hsv)
+    # hist = cv2.equalizeHist(v)
+    # result = cv2.merge((h,s,hist))
+    # result = cv2.cvtColor(img,cv2.COLOR_HSV2BGR)
+    #img_gray= cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+    clahe = cv2.createCLAHE(clipLimit=0.82,tileGridSize=(4,4))
+    cl1 = clahe.apply(v)
+    result = cv2.merge((h,s,cl1))
+    result = cv2.cvtColor(result,cv2.COLOR_HSV2BGR)
+    return result  
+
+def filter_pipeline(img):
+    kernel = np.array([[0, -1, 0],
+                       [-1, 5,-1],
+                       [0, -1, 0]])
+    img = cv2.filter2D(src=img, ddepth=-1, kernel=kernel)
+    gamma = 1.8
+    invGamma = 1 / gamma
+    img = filter__gamma_correction(img, invGamma)
+    img = clahe(img)
+    return img

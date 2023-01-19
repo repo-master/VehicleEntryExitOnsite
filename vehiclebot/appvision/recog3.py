@@ -9,6 +9,7 @@ from vehiclebot.types import NUMBER_PLATE_PATTERN
 
 import pickle
 from uuid import uuid4
+import cv2
 
 def boxSortCentroidReadingOrder(boxes : np.ndarray) -> np.ndarray:
     if boxes is None or len(boxes) == 0: return boxes
@@ -29,6 +30,8 @@ def recognize(img : np.ndarray, text_detect_model, ocr_model) -> typing.List[str
     new_width = 512
 
     img_scaled, scale = imutils.scaleImgRes(img, width=new_width)
+    #cv2.imshow("OCR", img)
+    #cv2.waitKey(1)
     boxes = text_detect_model.detect(img_scaled)
 
     if boxes is None:
@@ -46,12 +49,15 @@ def recognize(img : np.ndarray, text_detect_model, ocr_model) -> typing.List[str
         return
 
     generated_text = ocr_model.detect(imgs_text_cropped)
+
+    #
+
     return generated_text
 
 def parse(texts : typing.List[str]):
     if texts is None:
         return {
-            "message": "No number plate detected",
+            "message": "No text detected",
             "code": -2
         }
 
@@ -67,10 +73,10 @@ def parse(texts : typing.List[str]):
         print(s, '-', r.groupdict() if r is not None else 'Nope')
     '''
     
-    plate_text_parsed = NUMBER_PLATE_PATTERN.match(full_text)
+    plate_text_parsed = NUMBER_PLATE_PATTERN.search(full_text)
     if plate_text_parsed is None:
         return {
-            "message": "Number plate can't be determined",
+            "message": "Text detected does not fit in the plate format",
             "code": 1,
             "plate_number": {},
             "plate_str": None,

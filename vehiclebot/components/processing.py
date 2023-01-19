@@ -33,7 +33,7 @@ class DetectionHandler(AIOTask):
             is_stop, next_items = await asyncio.gather(self._stop.wait_for(timeout=.1), self.save_queue.get_wait_for(timeout=.3))
             if is_stop: break
             if next_items is None: continue
-            self.tm.pool.map(self._dispatchDetection, next_items)
+            #self.tm.pool.map(self._dispatchDetection, next_items)
             self.save_queue.task_done()
 
     async def processDetection(self, detection_task : asyncio.Future):

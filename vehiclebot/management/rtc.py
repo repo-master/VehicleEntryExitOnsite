@@ -140,10 +140,11 @@ class RTCServer(RTCPeer):
         })
 
     async def __on_app_shutdown_handler(self, app):
-        self.logger.info("Waiting for peer connections to close...")
-        pc_close_tasks = [AIOTask.wait_task_timeout_autocancel(pc.close(), timeout=1.0) for pc in self.__pc_list]
-        with logging_redirect_tqdm():
-            for f in tqdm.asyncio.tqdm.as_completed(pc_close_tasks):
-                await f
-        self.logger.debug("All peer connections closed")
-        self.__pc_list.clear()
+        if len(self.__pc_list) > 0:
+            self.logger.info("Waiting for peer connections to close...")
+            pc_close_tasks = [AIOTask.wait_task_timeout_autocancel(pc.close(), timeout=1.0) for pc in self.__pc_list]
+            with logging_redirect_tqdm():
+                for f in tqdm.asyncio.tqdm.as_completed(pc_close_tasks):
+                    await f
+            self.logger.debug("All peer connections closed")
+            self.__pc_list.clear()

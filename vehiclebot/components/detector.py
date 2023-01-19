@@ -50,7 +50,7 @@ class RemoteObjectDetector(AIOTask):
 
         next_time = time.time()
         delaySleep = 0
-        while not await self._stopEv.wait_for(min(delaySleep, 1/self.ABSOLUTE_MAX_RPS)):
+        while not await self._stopEv.wait_for(max(delaySleep, 1/self.ABSOLUTE_MAX_RPS)):
             #Try to grab a frame from video source
             img = capTask.frame()
             if img is not None:
@@ -60,14 +60,7 @@ class RemoteObjectDetector(AIOTask):
                     img_proc = img
                     scale = 1.0
 
-                det_task = {
-                    "task": "detect",
-                    "params": {
-                        "img": img_proc,
-                        "model": self.model_name
-                    }
-                }
-                det : dict = await self._task_exec.run(det_task)
+                det : dict = await self._task_exec.run("detect", img=img_proc, model=self.model_name)
                 if det:
                     await self.tm.emit(
                         self.output_result,

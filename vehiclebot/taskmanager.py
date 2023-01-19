@@ -22,6 +22,10 @@ class TaskManager(object):
         self.app = app
         self.logger = logging.getLogger(__name__)
         self.tasks : Dict[str, AIOTask] = dict()
+
+    @property
+    def loop(self):
+        return self.app.loop
         
     def _handle_task_done(self, cor : asyncio.Task):
         res = cor.result()
@@ -89,7 +93,7 @@ class TaskManager(object):
         '''
         if task is None: return False
         if isinstance(task, list):
-            return await asyncio.gather(*[self.emitTask(x, event, *args, **kwargs) for x in task])
+            return await asyncio.gather(*[self.emit(x, event, *args, **kwargs) for x in task])
         task_obj : AIOTask = task
         if isinstance(task, str):
             try:

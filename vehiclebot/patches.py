@@ -29,12 +29,12 @@ class JSONifier(json.JSONEncoder):
     
 
 async def _e_waitfor_stub(self, timeout=None):
-    with suppress(asyncio.TimeoutError):
+    with suppress(asyncio.TimeoutError, KeyboardInterrupt):
         await asyncio.wait_for(self.wait(), timeout)
     return self.is_set()
 
 async def _q_get_waitfor_stub(self, timeout=None):
-    with suppress(asyncio.TimeoutError):
+    with suppress(asyncio.TimeoutError, KeyboardInterrupt):
         return await asyncio.wait_for(self.get(), timeout)
 
 def asyncio_monkey_patch():

@@ -1,9 +1,9 @@
 
 from ..task import AIOTask, TaskOrTasks
-from ..multitask import AsyncProcess
 
 from .camera import CameraSource
 from ..types import Detections
+from ..model.filter import unsharp_mask, filter__removeShadow
 
 from ..tracker import Trajectory, Tracker, Track, motrackers, TRACK_COLORS
 
@@ -114,7 +114,8 @@ class FeatureTracker:
                         trk_obj.bbox = np.array(new_bbox)
 
     __call__ = update
-    
+
+'''
 class TrackerProcess(threading.Thread):
     def __init__(self, tracker_config : dict):
         super().__init__(daemon=True)
@@ -261,11 +262,11 @@ class TrackerProcess(threading.Thread):
     #Public methods
 
     def updateVideoFrame(self, frame : np.ndarray):
-        '''Update feature tracker with new video frame'''
+        #Update feature tracker with new video frame
         self._feature_tracker.updateTrackFrame(frame)
         
     def updateDetection(self, detection : Detections, frame : np.ndarray, scale : float):
-        '''Add new detection to queue for processing'''
+        #Add new detection to queue for processing
         #NEW [also FIXME]: Filter detection by ID to only track plate
         if self._track_only_classes is not None:
             selected_ids = np.isin(detection.class_ids, self._track_only_classes)
@@ -273,7 +274,7 @@ class TrackerProcess(threading.Thread):
         self._detections.put((detection, frame, scale))
         
     def drawTrackBBoxes(self, img : np.ndarray) -> np.ndarray:
-        '''Draw bboxes of current tracks on image'''
+        #Draw bboxes of current tracks on image
         _tracker_id = self._feature_tracker.trackerID()
         output_tracks = list(self.tracker.tracks.values()) #So that we can get all tracks instead of active ones
         for trk_obj in output_tracks:
@@ -344,34 +345,30 @@ class TrackerProcess(threading.Thread):
             except IndexError:
                 break
         return res
-
+'''
 
 import multiprocessing as mp
 import aioprocessing as amp
 
-class AsyncObjectTrackerProcess(mp.Process):
-    def __init__(self, mot_params : dict, **kwargs):
+class ObjectTrackerProcess(mp.Process):
+    def __init__(self,
+                stopEv : mp.Event,
+                readyEv : mp.Event,
+                detections : mp.Queue,
+                detectionQueue : mp.Queue,
+                update_rate : float,
+                tracker_cls,
+                mot_params : dict):
         super().__init__()
-        #How often to update the tracker
-        self._update_rate : float = mot_params.pop('update_rate', 10.0)
-        self._track_only_classes = [1]
-
-        #Load tracker
-        _tracker_type = mot_params.pop('type')
-        #Get class of the tracker we want to use from the motrackers module
-        tracker_cls : typing.Type[Tracker] = getattr(motrackers, _tracker_type) #Throws AttributeError if invalid
-        if not issubclass(tracker_cls, Tracker):
-            raise ValueError("Tracker type '%s' is not a valid tracker!" % str(_tracker_type))
-
+        self._stopEv = stopEv
+        self._ready = readyEv
+        self._detections = detections
+        self._detectionQueue = detectionQueue
+        self._update_rate = update_rate
         self.tracker : Tracker = tracker_cls(
             tracker_output_format='mot_challenge',
             **mot_params
         )
-
-        self._stopEv : amp.Event = amp.AioEvent(context=mp.get_context())
-        self._detections : amp.Queue[typing.Tuple[Detections, np.ndarray, float]] = amp.AioQueue(maxsize=10, context=mp.get_context())
-        self._detectionQueue : amp.Queue[typing.OrderedDict] = amp.AioQueue(maxsize = 0, context=mp.get_context())
-
 
     #==== Process realm ====
 
@@ -382,6 +379,7 @@ class AsyncObjectTrackerProcess(mp.Process):
 
         next_time = time.time()
         delaySleep = 0
+        self._ready.set()
         while not self._stopEv.wait(timeout=delaySleep):
             try:
                 #Any new detections?
@@ -408,6 +406,7 @@ class AsyncObjectTrackerProcess(mp.Process):
     def _updateTrackerStats(self, scale : float):
         setattr(self.tracker, '_scale', scale)
         for trk_obj in self.tracker.tracks.values():
+            setattr(trk_obj, '_scale', scale)
             setattr(trk_obj, '_update_ts', datetime.now())
             if trk_obj.age == 1:
                 setattr(trk_obj, '_create_ts', trk_obj._update_ts)
@@ -416,16 +415,16 @@ class AsyncObjectTrackerProcess(mp.Process):
         inv_scale = 1/scale
         #_trj_id = self._trajectory.trackerID()
         for trk_obj in self.tracker.tracks.values():
+            xmin, ymin, width, height = trk_obj.bbox
+
+            '''
             trk = trk_obj.output()
             #trj_obj = getattr(trk_obj, _trj_id, None)
 
             #Extract all information needed
             trk_id = trk[1]
-            xmin, ymin, width, height = trk[2:6]
             conf : float = trk[6]
             class_id : int = trk_obj.class_id
-
-            '''
             detect_ts, update_ts = None, None
             traj_dir_angle = None
             traj_dir_mv = None
@@ -444,50 +443,85 @@ class AsyncObjectTrackerProcess(mp.Process):
                 traj_is_mv = trj_obj['is_moving']
                 traj_pos = np.array(trj_obj['curr_pos'])*inv_scale
             '''
+
             #Calculate centroid of current detection
-            xcentroid, ycentroid = xmin + 0.5*width, ymin + 0.5*height
+            #xcentroid, ycentroid = xmin + 0.5*width, ymin + 0.5*height
+
+            padding = 0
+            min_dim = min(width, height)
+            if min_dim > 16:
+                padding = min_dim / 8
+                xmin -= padding
+                ymin -= padding
+                if xmin < 0: xmin = 0
+                if ymin < 0: ymin = 0
+                width += padding*2
+                height += padding*2
 
             #Integer for cropping
             xmin, ymin, width, height = int(xmin*inv_scale), int(ymin*inv_scale), int(width*inv_scale), int(height*inv_scale)
-            xcentroid, ycentroid = int(xcentroid*inv_scale), int(ycentroid*inv_scale)
-            
+            #xcentroid, ycentroid = int(xcentroid*inv_scale), int(ycentroid*inv_scale)
+
             img_crop = cropImage(frame, xmin, ymin, xmin+width, ymin+height)
             if img_crop.shape[0]*img_crop.shape[1] > 0:
+                #Pre-processing the detected image
+                # Grayscale
+                img_crop = cv2.cvtColor(img_crop, cv2.COLOR_BGR2GRAY)
+                # Fixed-height
+                img_crop, _ = scaleImgRes(img_crop, height=128)
+                # Remove distorted shadow-like pixels. Makes the image highly saturated
+                img_crop = filter__removeShadow(img_crop)
+                # Unsharp-mask to make image a bit sharper
+                #img_crop = unsharp_mask(img_crop)
                 setattr(trk_obj, 'latest_frame', img_crop)
+                setattr(trk_obj, 'metric_blur', self.variance_of_laplacian(img_crop))
 
-            #TODO: Class Object
-            '''res_item = {
-                'track_id': trk_id,
-                'age': trk_obj.age,
-                'lost_for_frames': trk_obj.lost,
-                'img': img_crop,
-                'detection_class': (class_id, conf),
-                'is_new_detection': trk_obj.age == 1,
-                'bbox': (xmin, ymin, width, height),
-                'first_detect_ts': detect_ts,
-                'last_update_ts': update_ts,
-                'movement_speed': traj_mv_spd,
-                'is_moving': traj_is_mv,
-                'track_pos': traj_pos,
-                'centroid_pos': (xcentroid, ycentroid),
-                'estimated_movement_angle': traj_dir_angle,
-                'estimated_movement_direction': traj_dir_mv
-            }'''
-
+    @staticmethod
+    def variance_of_laplacian(image):
+        return cv2.Laplacian(image, cv2.CV_64F).var()
 
     # === End process realm ===
 
 
+class AsyncObjectTrackerProcess:
+    def __init__(self, mot_params : dict, **kwargs):
+        #How often to update the tracker
+        update_rate : float = mot_params.pop('update_rate', 10.0)
+        self._track_only_classes = None#[1]
+
+        #Load tracker
+        _tracker_type = mot_params.pop('type')
+        #Get class of the tracker we want to use from the motrackers module
+        tracker_cls : typing.Type[Tracker] = getattr(motrackers, _tracker_type) #Throws AttributeError if invalid
+        if not issubclass(tracker_cls, Tracker):
+            raise ValueError("Tracker type '%s' is not a valid tracker!" % str(_tracker_type))
+
+        self._stopEv : amp.Event = amp.AioEvent(context=mp.get_context())
+        self._readyEv : amp.Event = amp.AioEvent(context=mp.get_context())
+        self._detections : amp.Queue[typing.Tuple[Detections, np.ndarray, float]] = amp.AioQueue(maxsize=10, context=mp.get_context())
+        self._detectionQueue : amp.Queue[typing.OrderedDict] = amp.AioQueue(maxsize = 0, context=mp.get_context())
+
+        self._proc = ObjectTrackerProcess(
+            self._stopEv, self._readyEv, self._detections, self._detectionQueue,
+            update_rate,
+            tracker_cls,
+            mot_params
+        )
+
     #Async interface
+    async def start(self):
+        await asyncio.get_event_loop().run_in_executor(None, self._proc.start)
+        with suppress(asyncio.CancelledError):
+            await self._readyEv.coro_wait(timeout=3.0)
 
     async def safeShutdown(self, timeout : float = 10):
         self._stopEv.set()
 
         # N.B. Not using AioProcess as it is very difficult to subclass it, so manually perform shutdown
-        await asyncio.get_event_loop().run_in_executor(None, self.join, timeout)
-        if self.is_alive():
-            await asyncio.get_event_loop().run_in_executor(None, self.terminate)
-        await asyncio.get_event_loop().run_in_executor(None, self.close)
+        await asyncio.get_event_loop().run_in_executor(None, self._proc.join, timeout)
+        if self._proc.is_alive():
+            await asyncio.get_event_loop().run_in_executor(None, self._proc.terminate)
+        await asyncio.get_event_loop().run_in_executor(None, self._proc.close)
 
     async def updateDetection(self, detection : Detections, frame : np.ndarray, scale : float):
         '''Add new detection to queue for processing'''
@@ -527,7 +561,7 @@ class ObjectTracker(AIOTask):
         self.logger.info("Started Tracker task")
         
     async def start_task(self):
-        await asyncio.get_event_loop().run_in_executor(None, self.tracker.start)
+        await self.tracker.start()
         self._long_running_tasks.append(asyncio.create_task(self.tracksProcessor()))
 
     async def stop_task(self):

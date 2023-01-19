@@ -1,3 +1,3 @@
 
 from ._base import ModelExecutor
-from .remotemodel import RemoteModelExecutor
+from .remotemodel import RemoteModelExecutor, RemoteThreadedModelExecutor

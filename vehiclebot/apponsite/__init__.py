@@ -21,10 +21,30 @@ from aiohttp.client import ClientSession
 from vehiclebot.config import load_config
 from vehiclebot.log import init_root_logger, aio_exc_hdl
 from vehiclebot.taskmanager import TaskManager
-from vehiclebot.model.executor import RemoteModelExecutor
+from vehiclebot.model import executor
 from vehiclebot.management import init_routes
 
 root_logger : logging.Logger = init_root_logger()
+
+def remote_executor_ctx(model_executor_cfg : dict):
+    async def _wrap_remote_executor_ctx(app : Application):
+        _log = logging.getLogger('remote_executor_ctx')
+        executor_name : str = model_executor_cfg.pop('()', None)
+        if executor_name is None:
+            executor_class = None
+        else:
+            executor_class = getattr(executor, executor_name, None)
+
+        if executor_class is None:
+            executor_class = executor.RemoteModelExecutor
+            _log.warning("Model executor '%s' is invalid. Defaulting to '%s'", str(executor_name), str(executor_class))
+
+        app['model_executor'] = executor_class(**model_executor_cfg)
+        yield
+        _log.debug('Closing model executor')
+        await app['model_executor']._cleanup()
+
+    return _wrap_remote_executor_ctx
 
 def client_session_ctx(api : dict):
     async def _wrap_client_session_ctx(app : Application):
@@ -83,7 +103,8 @@ async def VehicleEntryExitOnSite(loop : asyncio.AbstractEventLoop = None, debug 
     root_logger.debug("AIO application created")
 
     #Model executor
-    app['model_executor'] = RemoteModelExecutor(server_endpoint="http://localhost:5000/")
+    model_executor_cfg = app['cfg'].get('model_executor', {})
+    app.cleanup_ctx.append(remote_executor_ctx(model_executor_cfg))
 
     #Management pages
     if "management" in app['cfg']:

@@ -33,11 +33,16 @@ app:
           #Hint at what type of camera is being pointed
           kind: media
           #Which camera device to use (index, path or url of stream)
-          src: media/IMG_4081.MOV
+          #src: media/IMG_4081.MOV
+          #src: media/Untitled video - Made with Clipchamp.mp4
+          #src: media/car_park.mp4
+          src: media/Car in parking Garage - Parking garage security camera system.mp4
+          #src: C:\Users\naray_ww5r8rk\Downloads\Untitled video - Made with Clipchamp (1).mp4
+
           #Skip beginning x number of frames in case there is no activity there
           skip_frames: 0
           #Slow down footage (frame rate cap) to make demo easier to view
-          throttle_fps: 16
+          throttle_fps: 30
 
   #Conenction to backend API for database and history data APIs
   #This API will require authentication using `site_id` and `site_key` (defined above)
@@ -66,7 +71,7 @@ app:
           # Check out the 'motrackers' library to find out which trackers are supported
           type: CentroidTracker
           # Number of detection frames till lost
-          max_lost: 10
+          max_lost: 15
           # iou_threshold: 0.55
           # Steady update rate
           update_rate: 60
@@ -78,22 +83,29 @@ app:
         input_source: camera_source
         #Which detection model to use
         model: vehicle_plate_yolov5
+        #model: plate_detect_hf_yolos
         output: vehicle_tracker
         #Lower resolutions will be faster to process (less bandwidth) but will have less precision
         #and accuracy than full-size frame. Size of 640 is default (YOLOv5 frame size)
-        process_size: 360
-        update_rate: 1
+        process_size: 640
+        update_rate: 30
 
     # To gather all detections, associate them with a vehicle number and generate entry/exit timestamps
     vehicle_manager:
-      type: vehiclebot.components.manager.VehicleManager
-      properties:
+     type: vehiclebot.components.manager.VehicleManager
+     properties:
          
 
     # RTC stream tracks
     vidstream_main:
       type: vehiclebot.components.rtc.rtcstream.RTCStreamTrack
 
+    vidmixer:
+      type: vehiclebot.components.videocomposer.VideoComposer
+
+  model_executor:
+    (): RemoteThreadedModelExecutor
+    server_endpoint: http://localhost:5000/
 
   # Management web server. Uncomment to enable
   management:
