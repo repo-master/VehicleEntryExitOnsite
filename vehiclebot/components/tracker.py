@@ -4,6 +4,8 @@ from ..task import AIOTask, TaskOrTasks
 from .camera import CameraSource
 from ..types import Detections
 from ..model.filter import unsharp_mask, filter__removeShadow
+from ..patches import point_angle
+from math import dist
 
 from ..tracker import Trajectory, Tracker, Track, motrackers, TRACK_COLORS
 
@@ -410,7 +412,11 @@ class ObjectTrackerProcess(mp.Process):
             setattr(trk_obj, '_update_ts', datetime.now())
             if trk_obj.age == 1:
                 setattr(trk_obj, '_create_ts', trk_obj._update_ts)
-                
+            if not hasattr(trk_obj, '_traj'):
+                setattr(trk_obj, '_traj', collections.deque(maxlen=10))
+            if not hasattr(trk_obj, '_mv_dir'):
+                setattr(trk_obj, '_mv_dir', None)
+
     def _updateResults(self, frame : np.ndarray, scale : float):
         inv_scale = 1/scale
         #_trj_id = self._trajectory.trackerID()
@@ -445,7 +451,20 @@ class ObjectTrackerProcess(mp.Process):
             '''
 
             #Calculate centroid of current detection
-            #xcentroid, ycentroid = xmin + 0.5*width, ymin + 0.5*height
+            xcentroid, ycentroid = (trk_obj.bbox[:2] + trk_obj.bbox[2:]*0.5)*inv_scale
+            xcentroid /= frame.shape[1]
+            ycentroid /= frame.shape[0]
+
+            setattr(trk_obj, '_centroid', (xcentroid, ycentroid))
+            trk_obj._traj.append((xcentroid, ycentroid))
+            if len(trk_obj._traj) >= 3:
+                mv_pt0, mv_pt1 = trk_obj._traj[0], trk_obj._traj[-1]
+                ldist = dist(mv_pt0, mv_pt1)
+                if ldist >= 1e-5:
+                    t_angle = point_angle(mv_pt0, mv_pt1)
+                    setattr(trk_obj, '_mv_dir', t_angle)
+                else:
+                    setattr(trk_obj, '_mv_dir', None)
 
             padding = 0
             min_dim = min(width, height)
@@ -487,7 +506,7 @@ class AsyncObjectTrackerProcess:
     def __init__(self, mot_params : dict, **kwargs):
         #How often to update the tracker
         update_rate : float = mot_params.pop('update_rate', 10.0)
-        self._track_only_classes = None#[1]
+        self._track_only_classes = [1]
 
         #Load tracker
         _tracker_type = mot_params.pop('type')

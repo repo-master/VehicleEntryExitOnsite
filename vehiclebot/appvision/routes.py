@@ -35,7 +35,7 @@ VEHICLE_FB_DETECT_MODEL_FILE = "models/crossml/vehicle-front-back-best.pt"
 
 PLATE_DETECT_MODEL_FILE = "nickmuchi/yolos-small-finetuned-license-plate-detection"
 PLATE_DECODE_PROCESSOR_FILE = "microsoft/trocr-small-printed"
-PLATE_DECODE_MODEL_FILE = "models/anpr/"
+PLATE_DECODE_MODEL_FILE = "models/anpr/anpr_demo/"
 TEXT_DETECT_MODEL_FILE = "models/craft_mlt_25k.pth"
 
 #Auto-detect device to use. Put 'cpu' or 'cuda' (or cuda:0, etc.) to force a device

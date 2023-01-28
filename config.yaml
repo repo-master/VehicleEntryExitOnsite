@@ -36,13 +36,13 @@ app:
           #src: media/IMG_4081.MOV
           #src: media/Untitled video - Made with Clipchamp.mp4
           #src: media/car_park.mp4
-          src: media/Car in parking Garage - Parking garage security camera system.mp4
-          #src: C:\Users\naray_ww5r8rk\Downloads\Untitled video - Made with Clipchamp (1).mp4
+          #src: media/Car in parking Garage - Parking garage security camera system.mp4
+          src: C:\Users\naray_ww5r8rk\Downloads\Untitled video - Made with Clipchamp (2).mp4
 
           #Skip beginning x number of frames in case there is no activity there
           skip_frames: 0
           #Slow down footage (frame rate cap) to make demo easier to view
-          throttle_fps: 30
+          throttle_fps: 60
 
   #Conenction to backend API for database and history data APIs
   #This API will require authentication using `site_id` and `site_key` (defined above)
@@ -99,6 +99,17 @@ app:
     # RTC stream tracks
     vidstream_main:
       type: vehiclebot.components.rtc.rtcstream.RTCStreamTrack
+
+    link_camera_vidstream_main:
+      type: vehiclebot.components.link.Link
+      properties:
+        task_input:
+          camera_source: frame
+        task_output:
+          vidstream_main: frame
+
+    vehicledata:
+      type: vehiclebot.components.rtc.vehicledata.VehicleData
 
     vidmixer:
       type: vehiclebot.components.videocomposer.VideoComposer

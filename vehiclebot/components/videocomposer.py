@@ -14,7 +14,7 @@ class VideoDisplayDebug(threading.Thread):
 
         self._update_rate = 30.0
         self._vehicles = []
-        self._frame = None
+        self._frame = np.zeros((100,100,3))
         self._det = None
         self._stopEv = threading.Event()
 
@@ -24,12 +24,26 @@ class VideoDisplayDebug(threading.Thread):
         next_time = time.time()
         delaySleep = 0
         while not self._stopEv.is_set():
-            if self._frame is None:
-                frame = np.zeros((100,100,3))
-            else:
-                frame = self._frame.copy()
+            frame = self._frame.copy()
             vehicles = self._vehicles.copy()
             for veh in vehicles:
+                if veh.is_active:
+                    for gate_obj in veh.gate_data.values():
+                        (x1, y1, x2, y2, thickness, idx) = gate_obj['gate']
+                        x1 *= frame.shape[1]
+                        x2 *= frame.shape[1]
+                        y1 *= frame.shape[0]
+                        y2 *= frame.shape[0]
+                        cv2.line(frame, (int(x1), int(y1)), (int(x2), int(y2)), (128,128,128), thickness)
+
+                    if veh.centroid is not None:
+                        angle = veh.movement_direction
+                        pos = veh.centroid * frame.shape[1::-1]
+                        angle_vec = np.array([np.cos(angle), np.sin(angle)])
+                        _pt1 = pos + angle_vec * 64
+                        _pt2 = pos - angle_vec * 64
+                        cv2.arrowedLine(frame, _pt1.astype(int), _pt2.astype(int), (0,255,128),5)
+
                 trk = veh.associated_track
                 if trk is not None:
                     scale = trk._scale
@@ -42,8 +56,7 @@ class VideoDisplayDebug(threading.Thread):
                     cv2.putText(frame, plate_no, pt_txt, cv2.FONT_HERSHEY_COMPLEX, 1.5, (0,0,0), 4)
                     cv2.putText(frame, plate_no, pt_txt, cv2.FONT_HERSHEY_COMPLEX, 1.5, (255,255,255), 2)
 
-
-            scale = 0.5
+            scale = 0.3
             h, w = frame.shape[:2]
             fr = cv2.resize(frame, (int(w*scale), int(h*scale)))
             cv2.imshow("camera", fr)

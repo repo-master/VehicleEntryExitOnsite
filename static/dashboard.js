@@ -113,10 +113,10 @@ function start(pc) {
             content += row.type;
             content += "</td>";
             content += "<td>";
-            content += row.entry_state_ts;
+            content += row.entry_state_ts || '-';
             content += "</td>";
             content += "<td>";
-            content += row.exit_state_ts;
+            content += row.exit_state_ts || '-';
             content += "</td>";
             content += "<td>";
             content += duration;
@@ -139,10 +139,10 @@ function start(pc) {
             content += row.type;
             content += "</td>";
             content += "<td>";
-            content += row.entry_exit_state;
+            content += row.entry_exit_state || '-';
             content += "</td>";
             content += "<td>";
-            content += row.last_state_timestamp;
+            content += row.last_state_timestamp || '-';
             content += "</td>";
             content += "</tr>";
         }

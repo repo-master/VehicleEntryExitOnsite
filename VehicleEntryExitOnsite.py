@@ -11,8 +11,8 @@ TODO
     actually able to use any class to get detection (local or not). It becomes "ObjectDetector"
     and "PlateRecogniser" and they use other class objects such as "RemoteDetector" and "LocalDetector"
 [x] Sort vehicle detections in dashboard most recent on top
-[ ] Hide inactive / error detections from UI
-[ ] Entry + exit timing for same vehicle number (also duration)
+[x] Hide inactive / error detections from UI
+[x] Entry + exit timing for same vehicle number (also duration)
 
 '''
 

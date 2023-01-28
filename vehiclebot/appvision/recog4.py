@@ -65,14 +65,6 @@ def parse(texts : typing.List[str]):
 
     full_text = re.sub('[^\w\s]+', '', ' '.join(texts))
     
-    #TODO:
-    '''
-    for num in range(len(texts), 1, -1):
-        s = ' '.join(texts[:num])
-        r = NUMBER_PLATE_PATTERN.match(s)
-        print(s, '-', r.groupdict() if r is not None else 'Nope')
-    '''
-    
     plate_text_parsed = NUMBER_PLATE_PATTERN.search(full_text)
     if plate_text_parsed is None:
         return {

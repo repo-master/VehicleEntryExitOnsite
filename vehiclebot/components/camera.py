@@ -63,7 +63,7 @@ class CameraSourceProcess(threading.Thread):
             delaySleep = next_time - time.time()
             if delaySleep < 0:
                 delaySleep = 0
-                next_time = time.time()
+                #next_time = time.time()
         self.cleanup()
 
     def setExceptionMode(self, enable : bool):
@@ -160,6 +160,7 @@ class CameraSource(AIOTask):
         #Skip frames (optionally)
         await asyncio.get_event_loop().run_in_executor(None, self.cap.skip_frames, self._skipframes)
 
+        await asyncio.sleep(5)
         self.cap.start_capture()
 
         while True:
