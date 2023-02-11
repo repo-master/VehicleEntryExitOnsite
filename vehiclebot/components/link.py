@@ -14,12 +14,16 @@ class Link(AIOTask):
         super().__init__(tm, task_name)
         self._in = task_input
         self._out = task_output
-    
+
+    def makeEVProxy(self, task : AIOTask, event : str):
+        async def _proxy(*args, **kwargs):
+            task.emit(event, *args, **kwargs)
+        return _proxy
+
     async def __call__(self):
         for it, evin in self._in.items():
+            it_task = self.tm[it]
             for ot, evout in self._out.items():
-                with suppress(KeyError):
-                    ot_task = self.tm[ot]
-                    async def _proxy(*args, **kwargs):
-                        ot_task.emit(evout, *args, **kwargs)
-                    self.tm[it].on(evin, _proxy)
+                ot_task = self.tm[ot]
+                _proxy = self.makeEVProxy(ot_task, evout)
+                it_task.add_listener(evin, _proxy)

@@ -17,6 +17,15 @@ def page_dashboard(app_name = 'Vehicle Management', **kwargs):
         return {"APIBASE": '/', 'APP_NAME': app_name}
     return _page_dashboard
 
+async def change_video(request : web.Request) -> Dict[str, str]:
+    res = await request.app.tm['camera_source'].openVideo(
+        request.query.get("src"),
+        float(request.query.get('fps', 60.0))
+    )
+    return web.json_response({
+        'result': res
+    })
+
 def init_routes(app : web.Application, **cfg):
     '''
     Setup Jinja2 and add the needed routes to aiohttp server
@@ -32,5 +41,6 @@ def init_routes(app : web.Application, **cfg):
     )
     
     app.router.add_get("/", page_dashboard(**cfg))
+    app.router.add_post("/admin/change_video", change_video)
     
     app['rtc'] = RTCServer(app)

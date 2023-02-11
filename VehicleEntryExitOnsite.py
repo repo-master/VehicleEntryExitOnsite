@@ -39,7 +39,7 @@ if __name__ == "__main__":
     parser.add_argument('--debug', '-d', action='store_true', help='Enable debug output in logs and asyncio', default=False)
     parser.add_argument('--nogui', '-g', action='store_true', help='Disable GUI, work in headless mode', default=False)
     parser.add_argument('--no-tasks', '-s', action='store_true', help="Don't load any tasks defined in the config file")
-    parser.add_argument('--config', '-C', type=os.PathLike, default=None, help="Specify configuration file to use. Default will look in the environment variable if set, or look for 'config.yaml'")
+    parser.add_argument('--config', '-C', type=str, default=None, help="Specify configuration file to use. Default will look in the environment variable if set, or look for 'config.yaml'")
 
     args = parser.parse_args()
 

@@ -20,11 +20,12 @@ class YOLOModel(Model):
         label_str : bool = False,
         min_confidence : float = 0.55,
         min_score : float = 0.2,
-        min_nms : float = 0.45):
+        min_nms : float = 0.45,
+        normalize : bool = False):
         
         blob = self._phase_preprocess(img)
         outputs = self._phase_forward(blob)
-        detections = self._phase_unwrap(img, outputs, min_confidence, min_score, label_str)
+        detections = self._phase_unwrap(img, outputs, min_confidence, min_score, label_str, normalize)
         detections = self._phase_nms(detections, min_confidence, min_nms)
         if zip_results: detections = self._phase_zip(detections)
         return detections
@@ -40,12 +41,14 @@ class YOLOModel(Model):
                       detections,
                       min_confidence : float,
                       min_score : float,
-                      label_str : bool) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
+                      label_str : bool,
+                      normalize : bool) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
         class_ids = []
         confidences = []
         boxes = []
         
         image_height, image_width = img_orig.shape[:2]
+        whwh = np.resize(img_orig.shape[1::-1], 4)
         
         #Since we resized image to fit YOLO's layer shape, we need to rescale points to original
         if self._NEED_UNSCALE:
@@ -71,7 +74,7 @@ class YOLOModel(Model):
                     top = int((cy - h/2) * y_factor)
                     width = int(w * x_factor)
                     height = int(h * y_factor)
-                    box = np.array([left, top, width, height])
+                    box = np.array([left, top, width, height]) / (whwh[None,:] if normalize else 1)
 
                     boxes.append(box)
         
@@ -131,25 +134,29 @@ class YOLOModelYOLOv5(TorchModel, YOLOModel):
     
     def detect( self,
                 img : np.ndarray,
-                min_confidence : float = 0.55):
+                min_confidence : float = 0.55,
+                normalize : bool = False):
         self.net.conf = min_confidence  # NMS confidence threshold
         self.net.iou = 0.45  # NMS IoU threshold
         self.net.agnostic = False  # NMS class-agnostic
         self.net.multi_label = False  # NMS multiple labels per box
         self.net.max_det = 1000  # maximum number of detections per image
         outputs = self.net(img)
-        detections = self._phase_unwrap(outputs)
+        detections = self._phase_unwrap(img, outputs, normalize)
         return detections
 
     def _phase_unwrap(self,
+                      img : np.ndarray,
                       detections : Yolov5Detections,
+                      normalize : bool,
                       *args, **kwargs):
+        whwh = np.resize(img.shape[1::-1], 4)
         predictions = detections.pred[0]
         boxes = predictions[:, :4] # x1, y1, x2, y2
         scores = predictions[:, 4]
         categories = predictions[:, 5]
         return (
-            xyxy2xywh(boxes.detach().cpu().numpy()),
+            xyxy2xywh(boxes.detach().cpu().numpy()) / (whwh[None,:] if normalize else 1),
             scores.detach().cpu().numpy(),
             categories.detach().cpu().numpy().astype(int)
         )
@@ -187,11 +194,14 @@ class YOLOModelTransformers(HFTransformerModel, YOLOModel):
                       detections,
                       min_confidence : float,
                       min_score : float,
-                      label_str : bool) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
+                      label_str : bool,
+                      normalize : bool) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
         class_ids = []
         confidences = []
         boxes = []
-        
+
+        whwh = np.resize(img_orig.shape[1::-1], 4)
+
         device = self.metadata['device']
         img_sizes = torch.Tensor([img_orig.shape[:2]]).to(device)
         results = self.net['exractor'].post_process_object_detection(detections, threshold=min_confidence, target_sizes=img_sizes)
@@ -201,7 +211,7 @@ class YOLOModelTransformers(HFTransformerModel, YOLOModel):
             #Cull low score results
             if score > min_score:
                 confidences.append(score.detach().cpu().numpy())
-                boxes.append(xyxy2xywh(box.detach().cpu().numpy()))
+                boxes.append(xyxy2xywh(box.detach().cpu().numpy())) / (whwh[None,:] if normalize else 1),
                 class_ids.append(label.detach().cpu().numpy())
         
         return (

@@ -15,17 +15,6 @@ from collections.abc import Iterable
 import platform
 from contextlib import suppress
 
-def angle_between(p1, p2):
-    ang1 = np.arctan2(*p1[::-1])
-    ang2 = np.arctan2(*p2[::-1])
-    return ang1 - ang2
-
-def point_angle(p1, p2):
-    p1 = np.array(p1)
-    p2 = np.array(p2)
-    delta = p1[::-1] - p2[::-1]
-    return np.arctan2(*delta)
-
 class JSONifier(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, datetime.datetime):

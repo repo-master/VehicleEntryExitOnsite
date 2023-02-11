@@ -84,10 +84,12 @@ app:
         #Which detection model to use
         model: vehicle_plate_yolov5
         #model: plate_detect_hf_yolos
-        output: vehicle_tracker
+        output:
+          - vehicle_tracker
+          - vidmixer
         #Lower resolutions will be faster to process (less bandwidth) but will have less precision
         #and accuracy than full-size frame. Size of 640 is default (YOLOv5 frame size)
-        process_size: 640
+        process_size: 576
         update_rate: 30
 
     # To gather all detections, associate them with a vehicle number and generate entry/exit timestamps
@@ -106,6 +108,15 @@ app:
         task_input:
           camera_source: frame
         task_output:
+          #vidstream_main: frame
+          vidmixer: frameIn
+
+    link_composer_vidstream_main:
+      type: vehiclebot.components.link.Link
+      properties:
+        task_input:
+          vidmixer: frame
+        task_output:
           vidstream_main: frame
 
     vehicledata:
@@ -116,7 +127,8 @@ app:
 
   model_executor:
     (): RemoteThreadedModelExecutor
-    server_endpoint: http://localhost:5000/
+    #server_endpoint: http://localhost:5000/
+    server_endpoint: http://192.168.0.9:5000/
 
   # Management web server. Uncomment to enable
   management:

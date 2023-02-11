@@ -198,7 +198,7 @@ class RemoteThreadedModelExecutor(ModelExecutor):
     def _enc_img(self, img : np.ndarray, encode_format : str = ".png") -> typing.Tuple[bool, np.ndarray]:
         return cv2.imencode(encode_format, img)
 
-    def _detect(self, img : np.ndarray, model : str = None):
+    def _detect(self, img : np.ndarray, model : str = None, **kwargs):
         time_waiting = self._can_detect_after - time.time()
         if time_waiting > 0:
             time.sleep(time_waiting)
@@ -213,6 +213,7 @@ class RemoteThreadedModelExecutor(ModelExecutor):
             params = {}
             if model is not None:
                 params.update({"model": model})
+            params.update(kwargs)
             response = requests.post(
                 urljoin(self.server_endpoint, '/detect'),
                 data=img_blob.tobytes(),

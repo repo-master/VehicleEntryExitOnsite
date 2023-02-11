@@ -17,10 +17,11 @@ class CameraSourceProcess(threading.Thread):
         self._stopEv = threading.Event()
         self._frame : np.ndarray = None
         self._enableCapture = False
-        self._update_rate : float = 1000
+        self._update_rate : float = 60
         self._callbacks = []
         self._enablePreprocess = True
         self._preprocess = preprocessor
+
         if self._preprocess is None:
             self._preprocess = lambda x: x
 
@@ -41,40 +42,37 @@ class CameraSourceProcess(threading.Thread):
         delaySleep = 0
         while not self._stopEv.wait(timeout=delaySleep):
             if self._enableCapture:
-                ret, frame = self.read_frame()
-                if ret:
-                    if self._enablePreprocess:
-                        frame = self._preprocess(frame)
-                    self._frame = frame
-                    for cb in self._callbacks:
-                        cb(self._frame)
-                    
-                    '''h, w = frame.shape[:2]
-                    frame = cv2.resize(frame, (int(w/2),int(h/2)))
-                    pT = "filter: %s" % ('on' if self._enablePreprocess else 'off')
-                    cv2.putText(frame, pT, (16,16), cv2.FONT_HERSHEY_COMPLEX, 0.8, (0,0,0), 3)
-                    cv2.putText(frame, pT, (16,16), cv2.FONT_HERSHEY_COMPLEX, 0.8, (255,255,255), 2)
-                    cv2.imshow("full_frame", frame)
-                    k = cv2.waitKey(1)
-                    if k == ord('c'):
-                        self._enablePreprocess = not self._enablePreprocess'''
+                self.cap.grab()
+
+            #TODO: Implement frame skipping
+            if delaySleep > 0:
+                self._processAndDispatchCapturedFrame()
 
             next_time += (1.0 / self._update_rate)
             delaySleep = next_time - time.time()
             if delaySleep < 0:
                 delaySleep = 0
-                #next_time = time.time()
         self.cleanup()
+
+    def _processAndDispatchCapturedFrame(self):
+            ret, frame = self.read_frame()
+            if not ret: return
+            if self._enablePreprocess:
+                frame = self._preprocess(frame)
+            self._frame = frame
+            for cb in self._callbacks:
+                cb(self._frame)
 
     def setExceptionMode(self, enable : bool):
         self.cap.setExceptionMode(enable)
-    
+
     def open(self, src : typing.Union[int, str], fps : float = None) -> bool:
+        self.cap.release()
         ret = self.cap.open(src)
         if fps <= 0:
             fps = None
         if fps is None:
-            fps = 30 #cap get fps
+            fps = 60 #cap get fps
             #else: fps = 1000
         self._update_rate = fps
         return ret
@@ -89,7 +87,7 @@ class CameraSourceProcess(threading.Thread):
         return self.cap.release()
         
     def read_frame(self) -> typing.Tuple[bool, np.ndarray]:
-        return self.cap.read()
+        return self.cap.retrieve()
     
     def skip_frames(self, frames : int):
         for _ in range(frames):
@@ -148,12 +146,22 @@ class CameraSource(AIOTask):
 
         await self.wait_task_timeout(timeout=5.0)
 
+    async def openVideo(self, src : typing.Union[str, int], fps : float = None):
+        if src is None or not any([isinstance(src, str), isinstance(src, int)]):
+            raise ValueError("Parameter `src` must be provided")
+        if fps is None:
+            fps = self.throttle_fps
+        ret = await asyncio.get_event_loop().run_in_executor(None, self.cap.open, src, fps)
+        if ret:
+            self.emit("source_changed", src)
+        return ret
+
     async def __call__(self):
         if self.cap is None:
             return
         
         self.logger.info("Starting video capture of source '%s'" % self.source)
-        ret = await asyncio.get_event_loop().run_in_executor(None, self.cap.open, self.source, self.throttle_fps)
+        ret = await self.openVideo(self.source)
         if not ret:
             self.logger.error("Capture could not be created at source '%s':" % self.source)
 

@@ -12,6 +12,7 @@ import logging
 import typing
 import traceback
 import importlib
+import functools
 
 from . import recog4 as recognition
 
@@ -81,9 +82,9 @@ def models_preload(model_list : list):
 
 #Tasks for workers
 
-def detect_task(img_buf, model_detector):
+def detect_task(img_buf, model_detector, min_confidence=0.4, normalize=False):
     model = get_model(model_detector)
-    return model.detect(decode_image(img_buf), min_confidence=0.4)
+    return model.detect(decode_image(img_buf), min_confidence=min_confidence, normalize=normalize)
 
 def recognize_task(img_buf, ocr_model):
     #importlib.reload(recognition)
@@ -103,9 +104,12 @@ async def detect(req : web.Request) -> web.Response:
     
     res = await asyncio.get_running_loop().run_in_executor(
         req.app['pool_detect'],
-        detect_task,
-        await req.content.read(),
-        req.query.get('model', 'ultralytics_yolov5_nano')
+        functools.partial(detect_task,
+            await req.content.read(),
+            req.query.get('model', 'ultralytics_yolov5_nano'),
+            float(req.query.get('min_confidence', 0.4)),
+            bool(req.query.get('normalize', False))
+        )
     )
 
     return web.json_response({

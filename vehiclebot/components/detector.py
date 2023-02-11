@@ -57,10 +57,9 @@ class RemoteObjectDetector(AIOTask):
                 if self._process_size is not None:
                     img_proc, scale = await asyncio.get_event_loop().run_in_executor(None, functools.partial(scaleImgRes, img, height=self._process_size))
                 else:
-                    img_proc = img
-                    scale = 1.0
+                    img_proc, scale = img, 1.0
 
-                det : dict = await self._task_exec.run("detect", img=img_proc, model=self.model_name)
+                det : dict = await self._task_exec.run("detect", img=img_proc, model=self.model_name, min_confidence=0.6, normalize=True)
                 if det:
                     await self.tm.emit(
                         self.output_result,
