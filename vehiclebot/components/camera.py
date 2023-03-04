@@ -21,6 +21,7 @@ class CameraSourceProcess(threading.Thread):
         self._callbacks = []
         self._enablePreprocess = True
         self._preprocess = preprocessor
+        self._cap_op_lock = threading.Lock()
 
         if self._preprocess is None:
             self._preprocess = lambda x: x
@@ -42,7 +43,8 @@ class CameraSourceProcess(threading.Thread):
         delaySleep = 0
         while not self._stopEv.wait(timeout=delaySleep):
             if self._enableCapture:
-                self.cap.grab()
+                with self._cap_op_lock:
+                    self.cap.grab()
 
             #TODO: Implement frame skipping
             if delaySleep > 0:
@@ -67,15 +69,16 @@ class CameraSourceProcess(threading.Thread):
         self.cap.setExceptionMode(enable)
 
     def open(self, src : typing.Union[int, str], fps : float = None) -> bool:
-        self.cap.release()
-        ret = self.cap.open(src)
-        if fps <= 0:
-            fps = None
-        if fps is None:
-            fps = 60 #cap get fps
-            #else: fps = 1000
-        self._update_rate = fps
-        return ret
+        with self._cap_op_lock:
+            self.cap.release()
+            ret = self.cap.open(src)
+            if fps <= 0:
+                fps = None
+            if fps is None:
+                fps = 60 #cap get fps
+                #else: fps = 1000
+            self._update_rate = fps
+            return ret
 
     def start_capture(self):
         self._enableCapture = True
@@ -84,14 +87,16 @@ class CameraSourceProcess(threading.Thread):
         self._enableCapture = False
     
     def close(self):
-        return self.cap.release()
+        with self._cap_op_lock:
+            return self.cap.release()
         
     def read_frame(self) -> typing.Tuple[bool, np.ndarray]:
         return self.cap.retrieve()
     
     def skip_frames(self, frames : int):
         for _ in range(frames):
-            self.cap.grab()
+            with self._cap_op_lock:
+                self.cap.grab()
     
     def isOpened(self) -> bool:
         return self.cap.isOpened()

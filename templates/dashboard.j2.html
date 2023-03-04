@@ -8,6 +8,11 @@
     dayjs.extend(window.dayjs_plugin_relativeTime)
 </script>
 <script type="text/javascript" src="/static/dashboard.js"></script>
+<style>
+.table-striped > tbody > tr:nth-child(2n+1) > td, .table-striped > tbody > tr:nth-child(2n+1) > th {
+   background-color: rgb(33, 39, 126);
+}
+</style>
 {% endblock %}
 
 {% block content %}
@@ -39,7 +44,7 @@
     </div>
     <div class="row">
         <h4 class="mt-4">History data</h4>
-        <table class="table table-striped table-responsive">
+        <table class="table table-striped table-hover table-responsive">
             <thead>
                 <tr>
                     <th>Vehicle Number</th>

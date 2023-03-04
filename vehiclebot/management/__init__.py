@@ -18,13 +18,19 @@ def page_dashboard(app_name = 'Vehicle Management', **kwargs):
     return _page_dashboard
 
 async def change_video(request : web.Request) -> Dict[str, str]:
-    res = await request.app.tm['camera_source'].openVideo(
-        request.query.get("src"),
-        float(request.query.get('fps', 60.0))
-    )
-    return web.json_response({
-        'result': res
-    })
+    try:
+        res = await request.app.tm['camera_source'].openVideo(
+            request.query.get("src"),
+            float(request.query.get('fps', 60.0))
+        )
+        return web.json_response({
+            'result': res
+        })
+    except ValueError as e:
+        return web.json_response({
+            'result': "error",
+            'message': str(e)
+        }, status=500)
 
 def init_routes(app : web.Application, **cfg):
     '''

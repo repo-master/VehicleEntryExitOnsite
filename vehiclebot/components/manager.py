@@ -509,6 +509,8 @@ class VehicleManager(AIOTask):
             capTask.on('source_changed', self._reset_gates)
 
     async def _reset_gates(self, src):
+        for veh in self._all_vehicles.copy():
+            veh.associated_track = None
         #Determine camera source to select gate set
         with suppress(KeyError):
             import os

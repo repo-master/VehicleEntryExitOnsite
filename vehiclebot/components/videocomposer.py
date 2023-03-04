@@ -14,7 +14,7 @@ class VideoDisplayDebug(threading.Thread):
     def __init__(self,
                 **kwargs):
         self.record = False
-        self.renderToWindow = True
+        self.renderToWindow = False
 
         self._update_rate = 30.0
         self._vehicles = []
